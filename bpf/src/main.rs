@@ -15,7 +15,7 @@ use clap::{Parser, ValueEnum};
 #[command(author, version, about)]
 struct Cli {
     /// Verifier log level
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, default_value="none")]
     verifier_log_level: VerifierLogLevel,
 }
 

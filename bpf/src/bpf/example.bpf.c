@@ -44,52 +44,41 @@ static u32 msg_gbuf[MSG_GBUF_SIZE];
 
 static long user_ringbuf_callback(struct bpf_dynptr *dynptr, void *ctx)
 {
-	int err;
-	s32 i;
-	u64 msg_len;
-	u32 *msg_data;
+	long err;
+	enum bpf_dag_msg_type type;
+	struct bpf_dag_task *dag_task;
 
-	err = bpf_dynptr_read(&msg_len, sizeof(msg_len), dynptr, 0, 0);
+	bpf_printk("user_ring_callback is called!");
+
+	err = bpf_dynptr_read(&type, sizeof(type), dynptr, 0, 0);
 	if (err) {
-		bpf_printk("Failed to drain message.");
+		bpf_printk("Failed to drain message type.");
 		return 1; // stop continuing
 	}
 
-	msg_len /= 4;
-	if (4 * msg_len > MSG_GBUF_SIZE) {
-		bpf_printk("Message is too large (size=%d)", msg_len);
-		return 1;
+	if (type == BPF_DAG_MSG_NEW_TASK) {
+		struct bpf_dag_msg_new_task_payload payload;
+
+		err = bpf_dynptr_read(&payload, sizeof(payload), dynptr, sizeof(type), 0);
+		if (err) {
+			bpf_printk("Failed to drain message new task type.");
+			return 1; // stop continuing
+		}
+		
+		dag_task = bpf_dag_task_alloc(payload.src_node_tid, payload.src_node_weight);
+		if (!dag_task) {
+			bpf_printk("Failed to newly allocate a DAG task (src_node_tid=%d).", payload.src_node_tid);
+			return 1;
+		}
+
+		bpf_dag_task_dump(dag_task->id);
+
+		bpf_dag_task_free(dag_task);
+	} else {
+		bpf_printk("[ WARN ] Unknown message type: BPF_DAG_MSG_???=%d", type);
 	}
 
-	err = bpf_dynptr_read(&msg_gbuf[0], msg_len, dynptr, 0, 0);
-	if (err) {
-		bpf_printk("Failed to drain message at offset(%d)", 4 * i);
-		return 1; // stop continuing
-	}
-
-	// bpf_for(i, 0, msg_len) {
-	// 	u32 offset = 4 * i;
-	// 	if (offset >= MSG_GBUF_SIZE - 4) {
-	// 		return 1;
-	// 	}
-	// 	err = bpf_dynptr_read(&msg_gbuf[i], sizeof(u32), dynptr, 4 * i, 0);
-	// 	if (err) {
-	// 		bpf_printk("Failed to drain message at offset(%d)", 4 * i);
-	// 		return 1; // stop continuing
-	// 	}
-	// }
-
-	// bpf_dynptr_data(dynptr, offset, len) <-- len must be a constant!
-	// msg_data = bpf_dynptr_data(dynptr, 0, 4);
-	// if (!msg_data) {
-	// 	bpf_printk("bpf_dynptr_data failed");
-	// 	return 1;
-	// }
-
-	bpf_printk("[DEBUG] msg_len=%d", msg_len);
-	bpf_printk("[DEBUG] msg_body[0..31]=%d", *msg_data);
-
-	return 1;
+	return 0;
 }
 
 SEC("struct_ops/my_ops_calculate")
@@ -100,16 +89,6 @@ u64 BPF_PROG(my_ops_calculate, u64 n)
 	u8 buf[100];
 
 	bpf_user_ringbuf_drain(&urb, user_ringbuf_callback, NULL, 0);
-
-	dag_task = bpf_dag_task_alloc(buf, 100);
-	if (!dag_task) {
-		bpf_printk("Failed to allocate a DAG task.");
-		return -1;
-	}
-
-	bpf_dag_task_dump(dag_task->id);
-
-	bpf_dag_task_free(dag_task);
 
 	return err;
 }
