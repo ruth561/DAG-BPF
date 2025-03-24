@@ -263,6 +263,22 @@ __bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task)
 	WARN_ON(true); // unreachable
 }
 
+__bpf_kfunc void bpf_dag_task_release_dtor(void *dag_task)
+{
+	pr_info("[*] bpf_dag_task_release_dtor\n");
+
+	for (int i = 0; i < BPF_DAG_TASK_LIMIT; i++) {
+		if (&bpf_dag_task_manager.dag_tasks[i] == dag_task) {
+			WARN_ON(!bpf_dag_task_manager.inuse[i]);
+			bpf_dag_task_manager.inuse[i] = false;
+			bpf_dag_task_manager.nr_dag_tasks--;
+			return;
+		}
+	}
+	WARN_ON(true); // unreachable
+}
+CFI_NOSEAL(bpf_dag_task_release_dtor);
+
 __bpf_kfunc_end_defs();
 
 BTF_KFUNCS_START(my_ops_kfunc_ids)
@@ -270,6 +286,24 @@ BTF_ID_FLAGS(func, bpf_dag_task_alloc, KF_ACQUIRE | KF_RET_NULL)
 BTF_ID_FLAGS(func, bpf_dag_task_free, KF_RELEASE)
 BTF_ID_FLAGS(func, bpf_dag_task_dump)
 BTF_KFUNCS_END(my_ops_kfunc_ids)
+
+BTF_ID_LIST(dag_task_dtor_ids)
+BTF_ID(struct, bpf_dag_task)
+BTF_ID(func, bpf_dag_task_release_dtor)
+
+static int __init dag_task_kfunc_init(void)
+{
+	const struct btf_id_dtor_kfunc dag_task_dtors[] = {
+		{
+			.btf_id	      = dag_task_dtor_ids[0],
+			.kfunc_btf_id = dag_task_dtor_ids[1]
+		},
+	};
+
+	return register_btf_id_dtor_kfuncs(dag_task_dtors,
+					   ARRAY_SIZE(dag_task_dtors),
+					   THIS_MODULE);
+}
 
 static const struct btf_kfunc_id_set my_ops_kfunc_set = {
 	.owner	= THIS_MODULE,
@@ -345,6 +379,8 @@ static int __init my_ops_init(void)
 		pr_err("failed to register kfuncs (%d)\n", err);
 		return err;
 	}
+
+	dag_task_kfunc_init();
 
 	err = register_bpf_struct_ops(&bpf_my_ops, my_ops);
 	if (err) {

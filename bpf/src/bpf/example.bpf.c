@@ -32,6 +32,20 @@ u64 cnt = 0;
 		}						\
 	} while (0)
 
+#define BPF_DAG_TASK_LIMIT 10
+
+struct dag_tasks_map_value {
+	struct bpf_dag_task __kptr *dag_task;
+};
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
+	__uint(max_entries, BPF_DAG_TASK_LIMIT);
+	__type(key, s32);
+	__type(value, struct dag_tasks_map_value);
+} dag_tasks SEC(".maps");
+
 #define USER_RINGBUF_SIZE (4096 * 4096)
 // Message queue from USER to BPF
 struct {
@@ -57,6 +71,8 @@ static long user_ringbuf_callback(struct bpf_dynptr *dynptr, void *ctx)
 	}
 
 	if (type == BPF_DAG_MSG_NEW_TASK) {
+		s32 key;
+		void *value;
 		struct bpf_dag_msg_new_task_payload payload;
 
 		err = bpf_dynptr_read(&payload, sizeof(payload), dynptr, sizeof(type), 0);
@@ -71,11 +87,33 @@ static long user_ringbuf_callback(struct bpf_dynptr *dynptr, void *ctx)
 			return 1;
 		}
 
-		bpf_dag_task_dump(dag_task->id);
+		bpf_printk("Successfully allocates a DAG-task! id=%d", dag_task->id);
 
-		bpf_dag_task_free(dag_task);
+		long status;
+		struct dag_tasks_map_value local, *v;
+		struct bpf_dag_task *old;
+		local.dag_task = NULL;
+
+		status = bpf_map_update_elem(&dag_tasks, &key, &local, 0);
+		if (status) {
+			bpf_printk("Failed to update dag_tasks's elem with NULL value");
+			bpf_dag_task_free(dag_task);
+			return 1;
+		}
+
+		v = bpf_map_lookup_elem(&dag_tasks, &key);
+		if (!v) {
+			bpf_printk("Failed to lookup dag_tasks's elem");
+			bpf_dag_task_free(dag_task);
+			return 1;
+		}
+
+		old = bpf_kptr_xchg(&v->dag_task, dag_task);
+
+		if (old)
+			bpf_dag_task_free(old);
 	} else {
-		bpf_printk("[ WARN ] Unknown message type: BPF_DAG_MSG_???=%d", type);
+		bpf_printk("[ WARN ] Unknown message type: BPF_DAG_MSG_?=%d", type);
 	}
 
 	return 0;
