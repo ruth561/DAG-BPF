@@ -47123,6 +47123,12 @@ struct bpf_dag_task {
 	struct edge_info edges[1000];
 };
 
+struct bpf_dag_task_manager {
+	u32 nr_dag_tasks;
+	bool inuse[10];
+	struct bpf_dag_task dag_tasks[10];
+};
+
 struct bpf_devmap_val {
 	__u32 ifindex;
 	union {

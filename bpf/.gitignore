@@ -3,5 +3,6 @@ target/
 src/bpf/mod.rs
 src/bpf/example.skel.rs
 src/bpf/my_ops.h
+src/bpf/dag_bpf.h
 
 compile_commands.json

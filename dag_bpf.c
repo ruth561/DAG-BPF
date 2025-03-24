@@ -5,6 +5,7 @@
 #include <linux/bpf.h>
 
 #include "dag_bpf.h"
+#include "asm-generic/bug.h"
 
 MODULE_AUTHOR("Takumi Jin");
 MODULE_DESCRIPTION("A simple implementation of a kernel module using struct_ops");
@@ -101,35 +102,187 @@ static struct bpf_struct_ops bpf_my_ops = {
 	.cfi_stubs	= &my_ops_stubs,
 };
 
+// MARK: bpf_dag_task
+// The maximum of the number of DAG tasks.
+#define BPF_DAG_TASK_LIMIT 10
+
+struct bpf_dag_task_manager {
+	u32			nr_dag_tasks;
+	bool			inuse[BPF_DAG_TASK_LIMIT];
+	struct bpf_dag_task	dag_tasks[BPF_DAG_TASK_LIMIT];
+};
+
+static struct bpf_dag_task_manager bpf_dag_task_manager;
+
+static void bpf_dag_task_manager_init(void)
+{
+	pr_info("bpf_dag_task_manager_init");
+	bpf_dag_task_manager.nr_dag_tasks = 0;
+	for (int i = 0; i < BPF_DAG_TASK_LIMIT; i++) {
+		bpf_dag_task_manager.inuse[i] = false;
+	}
+}
+
+static u32 consume_u32(void **buf)
+{
+	u32 *ptr = *buf;
+	u32 retval = *ptr;
+	ptr++;
+	*buf = ptr;
+	return retval;
+}
+
+static u64 consume_u64(void **buf)
+{
+	u64 *ptr = *buf;
+	u64 retval = *ptr;
+	ptr++;
+	*buf = ptr;
+	return retval;
+}
+
+static s32 parse_msg(void *msg, u32 size, struct bpf_dag_task *dag_task)
+{
+	// void *ptr = msg;
+	// u64 msg_size = consume_u64(&ptr);
+	// u64 nr_nodes, nr_edges;
+	// struct dag_task *dag_task = malloc(sizeof(struct dag_task));
+
+	// nr_nodes = consume_u64(&ptr);
+	// printf("[DEBUG] nr_nodes=%llu\n", nr_nodes);
+	// dag_task->nr_nodes = nr_nodes;
+	// for (int i = 0; i < nr_nodes; i++) {
+	// 	u32 tid = consume_u32(&ptr);
+	// 	u32 weight = consume_u32(&ptr);
+
+	// 	dag_task->nodes[i].tid = tid;
+	// 	dag_task->nodes[i].weight = weight;
+	// 	dag_task->nodes[i].prio = -1;
+	// }
+
+	// nr_edges = consume_u64(&ptr);
+	// printf("[DEBUG] nr_edges=%llu\n", nr_edges);
+	// dag_task->nr_edges = nr_edges;
+	// for (int i = 0; i < nr_edges; i++) {
+	// 	/* node(from) --> node(to) */
+	// 	u32 from = consume_u32(&ptr);
+	// 	u32 to = consume_u32(&ptr);
+
+	// 	dag_task->edges[i].from = from;
+	// 	dag_task->edges[i].to = to;
+
+	// 	u32 nr_outs = dag_task->nodes[from].nr_outs;
+	// 	dag_task->nodes[from].outs[nr_outs] = to;
+	// 	dag_task->nodes[from].nr_outs = nr_outs + 1;
+
+	// 	u32 nr_ins = dag_task->nodes[to].nr_ins;
+	// 	dag_task->nodes[to].ins[nr_ins] = from;
+	// 	dag_task->nodes[to].nr_ins = nr_ins + 1;
+	// }
+
+	// return dag_task;
+	return -1;
+}
+
 // MARK: kfuncs
 __bpf_kfunc_start_defs();
+
+__bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task);
 
 /**
  * msg:
  *
  * return value: dag_task id if succeeded, otherwise -1.
  */
-__bpf_kfunc struct bpf_dag_task *bpf_dag_task_alloc(u8 *msg, u32 size)
+__bpf_kfunc struct bpf_dag_task *bpf_dag_task_alloc(u8 *msg, u32 msg__sz)
 {
-	// TODO:
+	s32 err;
+	struct bpf_dag_task *dag_task = NULL;
+
 	pr_info("bpf_dag_task_alloc\n");
-	return NULL;
+
+	if (bpf_dag_task_manager.nr_dag_tasks >= BPF_DAG_TASK_LIMIT) {
+		pr_err("DAG-BPF: bpf_dag_task_alloc: There is no slots for a DAG task.");
+		return NULL;
+	}
+
+	for (int i = 0; i < BPF_DAG_TASK_LIMIT; i++) {
+		if (!bpf_dag_task_manager.inuse[i]) {
+			dag_task = &bpf_dag_task_manager.dag_tasks[i];
+			bpf_dag_task_manager.inuse[i] = true;
+			bpf_dag_task_manager.nr_dag_tasks++;
+			break;
+		}
+	}
+
+	if (!dag_task) {
+		pr_warn("Failed to allocate a DAG task.");
+		return NULL;
+	}
+
+	err = parse_msg(msg, msg__sz, dag_task);
+	if (err) {
+		pr_err("Failed to parse message.");
+		bpf_dag_task_free(dag_task);
+		return NULL;
+	}
+
+	return dag_task;
 }
 
 __bpf_kfunc void bpf_dag_task_dump(s32 dag_task_id)
 {
+	struct bpf_dag_task *dag_task;
+
 	pr_info("[*] bpf_graph_dump\n");
-	// TODO:
+
+	WARN_ON(dag_task_id < 0);
+	WARN_ON(BPF_DAG_TASK_LIMIT <= dag_task_id);
+	WARN_ON(!bpf_dag_task_manager.inuse[dag_task_id]);
+
+	dag_task = &bpf_dag_task_manager.dag_tasks[dag_task_id];
+	
+	pr_info("  nr_nodes: %u\n", dag_task->nr_nodes);
+	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		pr_info("  node[%d]: tid=%d, weight=%d, prio=%d\n",
+			i,
+			dag_task->nodes[i].tid,
+			dag_task->nodes[i].weight,
+			dag_task->nodes[i].prio);
+	}
+
+	pr_info("  nr_edges: %u\n", dag_task->nr_edges);
+	for (int i = 0; i < dag_task->nr_edges; i++) {
+		pr_info("  edge[%d]: %d --> %d\n",
+			i, dag_task->edges[i].from, dag_task->edges[i].to);
+	}
+
+	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		for (int j = 0; j < dag_task->nodes[i].nr_outs; j++) {
+			pr_info("  outs: %d --> %d\n", i, dag_task->nodes[i].outs[j]);
+		}
+	}
+
+	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		for (int j = 0; j < dag_task->nodes[i].nr_ins; j++) {
+			pr_info("  ins: %d --> %d\n", i, dag_task->nodes[i].ins[j]);
+		}
+	}
 }
 
-/**
- * return value: 0 if succeeded, -1 if failed.
- */
-__bpf_kfunc s32 bpf_dag_task_free(struct bpf_dag_task *dag_task)
+__bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task)
 {
 	pr_info("[*] bpf_dag_task_free\n");
-	// TODO:
-	return -1;
+
+	for (int i = 0; i < BPF_DAG_TASK_LIMIT; i++) {
+		if (&bpf_dag_task_manager.dag_tasks[i] == dag_task) {
+			WARN_ON(!bpf_dag_task_manager.inuse[i]);
+			bpf_dag_task_manager.inuse[i] = false;
+			bpf_dag_task_manager.nr_dag_tasks--;
+			return;
+		}
+	}
+	WARN_ON(true); // unreachable
 }
 
 __bpf_kfunc_end_defs();
@@ -145,6 +298,7 @@ static const struct btf_kfunc_id_set my_ops_kfunc_set = {
 	.set	= &my_ops_kfunc_ids,
 };
 
+// MARK: my_ops/ctl
 // =============================================================================
 // The following implementations are for files in sysfs:my_ops.
 // =============================================================================
@@ -185,6 +339,7 @@ static struct kobject *my_ops_kobj;
 // sysfs:my_ops/ctl file
 static struct kobj_attribute ctl_attr = __ATTR(ctl, 0660, ctl_show, ctl_store);
 
+// init/exit
 static int __init my_ops_init(void)
 {
 	int err;
@@ -205,7 +360,7 @@ static int __init my_ops_init(void)
 		return err;
 	}
 
-	// bpf_graph_manager_init();
+	bpf_dag_task_manager_init();
 
 	err = register_btf_kfunc_id_set(BPF_PROG_TYPE_STRUCT_OPS, &my_ops_kfunc_set);
 	if (err) {

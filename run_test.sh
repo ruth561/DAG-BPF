@@ -1,9 +1,9 @@
 #!/bin/bash
 
 dmesg -C
-insmod my_ops.ko
+insmod dag_bpf.ko
 
-echo "[*] insmod my_ops.ko"
+echo "[*] insmod dag_bpf.ko"
 dmesg
 dmesg -C
 
@@ -24,4 +24,4 @@ sleep 0.5
 pkill bpf
 sleep 0.5
 
-rmmod my_ops
+rmmod dag_bpf
