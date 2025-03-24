@@ -121,6 +121,7 @@ static void bpf_dag_task_manager_init(void)
 	bpf_dag_task_manager.nr_dag_tasks = 0;
 	for (int i = 0; i < BPF_DAG_TASK_LIMIT; i++) {
 		bpf_dag_task_manager.inuse[i] = false;
+		bpf_dag_task_manager.dag_tasks[i].id = i;
 	}
 }
 
@@ -291,8 +292,14 @@ BTF_ID_LIST(dag_task_dtor_ids)
 BTF_ID(struct, bpf_dag_task)
 BTF_ID(func, bpf_dag_task_release_dtor)
 
+static const struct btf_kfunc_id_set my_ops_kfunc_set = {
+	.owner	= THIS_MODULE,
+	.set	= &my_ops_kfunc_ids,
+};
+
 static int __init dag_task_kfunc_init(void)
 {
+	int err;
 	const struct btf_id_dtor_kfunc dag_task_dtors[] = {
 		{
 			.btf_id	      = dag_task_dtor_ids[0],
@@ -300,15 +307,21 @@ static int __init dag_task_kfunc_init(void)
 		},
 	};
 
-	return register_btf_id_dtor_kfuncs(dag_task_dtors,
-					   ARRAY_SIZE(dag_task_dtors),
-					   THIS_MODULE);
-}
+	err = register_btf_kfunc_id_set(BPF_PROG_TYPE_STRUCT_OPS, &my_ops_kfunc_set);
+	if (err) {
+		pr_err("failed to register kfuncs (%d)\n", err);
+		return err;
+	}
 
-static const struct btf_kfunc_id_set my_ops_kfunc_set = {
-	.owner	= THIS_MODULE,
-	.set	= &my_ops_kfunc_ids,
-};
+	err = register_btf_id_dtor_kfuncs(dag_task_dtors,
+					  ARRAY_SIZE(dag_task_dtors),
+					  THIS_MODULE);
+	if (err) {
+		pr_err("Failed to register a destructor to BTF ID of bpf_dag_task (%d)\n", err);
+		return err;
+	}
+	return 0;
+}
 
 // MARK: my_ops/ctl
 // =============================================================================
@@ -374,13 +387,11 @@ static int __init my_ops_init(void)
 
 	bpf_dag_task_manager_init();
 
-	err = register_btf_kfunc_id_set(BPF_PROG_TYPE_STRUCT_OPS, &my_ops_kfunc_set);
+	err = dag_task_kfunc_init();
 	if (err) {
-		pr_err("failed to register kfuncs (%d)\n", err);
+		pr_err("Failed to init kfunc (%d)", err);
 		return err;
 	}
-
-	dag_task_kfunc_init();
 
 	err = register_bpf_struct_ops(&bpf_my_ops, my_ops);
 	if (err) {

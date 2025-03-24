@@ -56,6 +56,46 @@ struct {
 #define MSG_GBUF_SIZE	100 * 1000
 static u32 msg_gbuf[MSG_GBUF_SIZE];
 
+static long handle_new_dag_task(struct bpf_dag_msg_new_task_payload *payload)
+{
+	s32 key;
+	void *value;
+	struct bpf_dag_task *dag_task, *old;
+	long status;
+	struct dag_tasks_map_value local, *v;
+
+	dag_task = bpf_dag_task_alloc(payload->src_node_tid, payload->src_node_weight);
+	if (!dag_task) {
+		bpf_printk("Failed to newly allocate a DAG task (src_node_tid=%d).", payload->src_node_tid);
+		return 1;
+	}
+
+	bpf_printk("Successfully allocates a DAG-task! id=%d", dag_task->id);
+
+	key = payload->src_node_tid;
+	local.dag_task = NULL;
+	status = bpf_map_update_elem(&dag_tasks, &key, &local, 0);
+	if (status) {
+		bpf_printk("Failed to update dag_tasks's elem with NULL value");
+		bpf_dag_task_free(dag_task);
+		return 1;
+	}
+
+	v = bpf_map_lookup_elem(&dag_tasks, &key);
+	if (!v) {
+		bpf_printk("Failed to lookup dag_tasks's elem");
+		bpf_dag_task_free(dag_task);
+		return 1;
+	}
+
+	old = bpf_kptr_xchg(&v->dag_task, dag_task);
+
+	if (old)
+		bpf_dag_task_free(old);
+
+	return 0;
+}
+
 static long user_ringbuf_callback(struct bpf_dynptr *dynptr, void *ctx)
 {
 	long err;
@@ -71,8 +111,6 @@ static long user_ringbuf_callback(struct bpf_dynptr *dynptr, void *ctx)
 	}
 
 	if (type == BPF_DAG_MSG_NEW_TASK) {
-		s32 key;
-		void *value;
 		struct bpf_dag_msg_new_task_payload payload;
 
 		err = bpf_dynptr_read(&payload, sizeof(payload), dynptr, sizeof(type), 0);
@@ -81,37 +119,12 @@ static long user_ringbuf_callback(struct bpf_dynptr *dynptr, void *ctx)
 			return 1; // stop continuing
 		}
 		
-		dag_task = bpf_dag_task_alloc(payload.src_node_tid, payload.src_node_weight);
-		if (!dag_task) {
-			bpf_printk("Failed to newly allocate a DAG task (src_node_tid=%d).", payload.src_node_tid);
+		err = handle_new_dag_task(&payload);
+		if (err) {
+			bpf_printk("Failed to handle a new dag task message");
 			return 1;
 		}
 
-		bpf_printk("Successfully allocates a DAG-task! id=%d", dag_task->id);
-
-		long status;
-		struct dag_tasks_map_value local, *v;
-		struct bpf_dag_task *old;
-		local.dag_task = NULL;
-
-		status = bpf_map_update_elem(&dag_tasks, &key, &local, 0);
-		if (status) {
-			bpf_printk("Failed to update dag_tasks's elem with NULL value");
-			bpf_dag_task_free(dag_task);
-			return 1;
-		}
-
-		v = bpf_map_lookup_elem(&dag_tasks, &key);
-		if (!v) {
-			bpf_printk("Failed to lookup dag_tasks's elem");
-			bpf_dag_task_free(dag_task);
-			return 1;
-		}
-
-		old = bpf_kptr_xchg(&v->dag_task, dag_task);
-
-		if (old)
-			bpf_dag_task_free(old);
 	} else {
 		bpf_printk("[ WARN ] Unknown message type: BPF_DAG_MSG_?=%d", type);
 	}
