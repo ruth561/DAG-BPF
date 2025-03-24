@@ -126,9 +126,10 @@ static void bpf_dag_task_manager_init(void)
 }
 
 // MARK: bpf_dag_task API
-static s32 bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, u32 weight)
+static s32 __bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, u32 weight)
 {
 	s32 node_id;
+
 	if (dag_task->nr_nodes == DAG_TASK_MAX_NODES) {
 		pr_warn("The maximum number of DAG nodes (%d) has been reached.", DAG_TASK_MAX_NODES);
 		return -1;
@@ -154,7 +155,7 @@ static s32 bpf_dag_task_init(struct bpf_dag_task *dag_task, u32 src_node_tid, u3
 	/*
 	 * Adds a source node. The node id of the source node is always 0.
 	 */
-	ret = bpf_dag_task_add_node(dag_task, src_node_tid, src_node_weight);
+	ret = __bpf_dag_task_add_node(dag_task, src_node_tid, src_node_weight);
 	WARN_ON(ret != 0);
 	WARN_ON(dag_task->nr_nodes != 1);
 	WARN_ON(dag_task->nr_edges != 0);
@@ -209,18 +210,10 @@ __bpf_kfunc struct bpf_dag_task *bpf_dag_task_alloc(u32 src_node_tid,
 	return dag_task;
 }
 
-__bpf_kfunc void bpf_dag_task_dump(s32 dag_task_id)
+__bpf_kfunc void bpf_dag_task_dump(struct bpf_dag_task *dag_task)
 {
-	struct bpf_dag_task *dag_task;
-
 	pr_info("[*] bpf_graph_dump\n");
 
-	WARN_ON(dag_task_id < 0);
-	WARN_ON(BPF_DAG_TASK_LIMIT <= dag_task_id);
-	WARN_ON(!bpf_dag_task_manager.inuse[dag_task_id]);
-
-	dag_task = &bpf_dag_task_manager.dag_tasks[dag_task_id];
-	
 	pr_info("  nr_nodes: %u\n", dag_task->nr_nodes);
 	for (int i = 0; i < dag_task->nr_nodes; i++) {
 		pr_info("  node[%d]: tid=%d, weight=%d, prio=%d\n",
@@ -247,6 +240,19 @@ __bpf_kfunc void bpf_dag_task_dump(s32 dag_task_id)
 			pr_info("  ins: %d --> %d\n", i, dag_task->nodes[i].ins[j]);
 		}
 	}
+}
+
+/**
+ * @dag_task: referenced kptr
+ * @tid: Thread id of the node.
+ * @weight: The weight of the node.
+ *
+ * @retval: -1 if it was failed, otherwise returns node_id.
+ */
+__bpf_kfunc s32 bpf_dag_task_add_node(struct bpf_dag_task *dag_task,
+				      u32 tid, u32 weight)
+{
+	return __bpf_dag_task_add_node(dag_task, tid, weight);
 }
 
 __bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task)
@@ -285,6 +291,7 @@ __bpf_kfunc_end_defs();
 BTF_KFUNCS_START(my_ops_kfunc_ids)
 BTF_ID_FLAGS(func, bpf_dag_task_alloc, KF_ACQUIRE | KF_RET_NULL)
 BTF_ID_FLAGS(func, bpf_dag_task_free, KF_RELEASE)
+BTF_ID_FLAGS(func, bpf_dag_task_add_node, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_dump)
 BTF_KFUNCS_END(my_ops_kfunc_ids)
 

@@ -96,6 +96,40 @@ static long handle_new_dag_task(struct bpf_dag_msg_new_task_payload *payload)
 	return 0;
 }
 
+static inline long handle_add_node(struct bpf_dag_msg_add_node_payload *payload)
+{
+	s32 key;
+	void *value;
+	struct bpf_dag_task *dag_task, *old;
+	struct dag_tasks_map_value *v;
+
+	key = payload->dag_task_id;
+	v = bpf_map_lookup_elem(&dag_tasks, &key);
+	if (!v) {
+		bpf_printk("There is no entry in dag_tasks with key=%d", key);
+		return -1;
+	}
+
+	dag_task = bpf_kptr_xchg(&v->dag_task, NULL); // acquire ownership
+	if (!dag_task) {
+		bpf_printk("dag_tasks[%d]->dag_task is NULL", key);
+		return -1;
+	}
+
+	bpf_dag_task_add_node(dag_task, payload->tid, payload->weight);
+
+	bpf_dag_task_dump(dag_task);
+
+	bpf_printk("Successfully add a node (tid=%d) to a DAG-task (id=%d)", payload->tid, dag_task->id);
+
+	old = bpf_kptr_xchg(&v->dag_task, dag_task);
+
+	if (old)
+		bpf_dag_task_free(old);
+
+	return 0;
+}
+
 static long user_ringbuf_callback(struct bpf_dynptr *dynptr, void *ctx)
 {
 	long err;
@@ -122,6 +156,21 @@ static long user_ringbuf_callback(struct bpf_dynptr *dynptr, void *ctx)
 		err = handle_new_dag_task(&payload);
 		if (err) {
 			bpf_printk("Failed to handle a new dag task message");
+			return 1;
+		}
+
+	} else if (type == BPF_DAG_MSG_ADD_NODE) {
+		struct bpf_dag_msg_add_node_payload payload;
+
+		err = bpf_dynptr_read(&payload, sizeof(payload), dynptr, sizeof(type), 0);
+		if (err) {
+			bpf_printk("Failed to drain message add node.");
+			return 1; // stop continuing
+		}
+		
+		err = handle_add_node(&payload);
+		if (err) {
+			bpf_printk("Failed to handle add_node message");
 			return 1;
 		}
 
