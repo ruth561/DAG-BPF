@@ -145,6 +145,56 @@ static s32 __bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, u32 w
 	return node_id;
 }
 
+/*
+ * If there is no node whose tid is @tid, then return -1.
+ * If the node is found, return the node id.
+ */
+static s32 get_node_id(struct bpf_dag_task *dag_task, s32 tid)
+{
+	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		if (dag_task->nodes[i].tid == tid)
+			return i;
+	}
+
+	return -1;
+}
+
+static s32 __bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from_tid, u32 to_tid)
+{
+	s32 edge_id, from, to;
+
+	from = get_node_id(dag_task, from_tid);
+	to = get_node_id(dag_task, to_tid);
+
+	if (from < 0 || to < 0) {
+		pr_err("There isn't a corresponding node (from_tid=%d, to_tid=%d)", from_tid, to_tid);
+		return -1;
+	}
+
+	// from and to are valid!
+	WARN_ON_ONCE(!(0 <= from && from < dag_task->nr_nodes));
+	WARN_ON_ONCE(!(0 <= to && to < dag_task->nr_nodes));
+
+	if (dag_task->nr_edges == DAG_TASK_MAX_EDGES) {
+		pr_warn("The maximum number of DAG edges (%d) has been reached.", DAG_TASK_MAX_EDGES);
+		return -1;
+	}
+
+	edge_id = dag_task->nr_edges;
+	dag_task->edges[edge_id].from = from;
+	dag_task->edges[edge_id].to = to;
+
+	s32 nr_outs = dag_task->nodes[from].nr_outs;
+	dag_task->nodes[from].outs[nr_outs] = to;
+	dag_task->nodes[from].nr_outs++;
+
+	s32 nr_ins = dag_task->nodes[to].nr_ins;
+	dag_task->nodes[to].ins[nr_ins] = from;
+	dag_task->nodes[to].nr_ins++;
+
+	return edge_id;
+}
+
 static s32 bpf_dag_task_init(struct bpf_dag_task *dag_task, u32 src_node_tid, u32 src_node_weight)
 {
 	s32 ret;
@@ -214,6 +264,8 @@ __bpf_kfunc void bpf_dag_task_dump(struct bpf_dag_task *dag_task)
 {
 	pr_info("[*] bpf_graph_dump\n");
 
+	pr_info("  id: %d\n", dag_task->id);
+
 	pr_info("  nr_nodes: %u\n", dag_task->nr_nodes);
 	for (int i = 0; i < dag_task->nr_nodes; i++) {
 		pr_info("  node[%d]: tid=%d, weight=%d, prio=%d\n",
@@ -237,7 +289,7 @@ __bpf_kfunc void bpf_dag_task_dump(struct bpf_dag_task *dag_task)
 
 	for (int i = 0; i < dag_task->nr_nodes; i++) {
 		for (int j = 0; j < dag_task->nodes[i].nr_ins; j++) {
-			pr_info("  ins: %d --> %d\n", i, dag_task->nodes[i].ins[j]);
+			pr_info("  ins: %d <-- %d\n", i, dag_task->nodes[i].ins[j]);
 		}
 	}
 }
@@ -253,6 +305,18 @@ __bpf_kfunc s32 bpf_dag_task_add_node(struct bpf_dag_task *dag_task,
 				      u32 tid, u32 weight)
 {
 	return __bpf_dag_task_add_node(dag_task, tid, weight);
+}
+
+/**
+ * @dag_task: referenced kptr
+ * @from:
+ * @to:
+ *
+ * @retval: -1 if it was failed, otherwise returns edge_id.
+ */
+ __bpf_kfunc s32 bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from, u32 to)
+{
+return __bpf_dag_task_add_edge(dag_task, from, to);
 }
 
 __bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task)
@@ -292,6 +356,7 @@ BTF_KFUNCS_START(my_ops_kfunc_ids)
 BTF_ID_FLAGS(func, bpf_dag_task_alloc, KF_ACQUIRE | KF_RET_NULL)
 BTF_ID_FLAGS(func, bpf_dag_task_free, KF_RELEASE)
 BTF_ID_FLAGS(func, bpf_dag_task_add_node, KF_TRUSTED_ARGS)
+BTF_ID_FLAGS(func, bpf_dag_task_add_edge, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_dump)
 BTF_KFUNCS_END(my_ops_kfunc_ids)
 
