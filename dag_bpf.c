@@ -256,12 +256,12 @@ static s32 __bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, u32 w
 	s32 node_id;
 
 	if (dag_task->nr_nodes == DAG_TASK_MAX_NODES) {
-		pr_warn("The maximum number of DAG nodes (%d) has been reached.", DAG_TASK_MAX_NODES);
+		pr_warn("bpf_dag_task_add_node: The maximum number of DAG nodes (%d) has been reached.", DAG_TASK_MAX_NODES);
 		return -1;
 	}
 
 	if (cnt_nr_nodes(dag_task, tid) > 0) {
-		pr_warn("node (tid=%d) already exists.", tid);
+		pr_warn("bpf_dag_task_add_node: The node (tid=%d) already exists.", tid);
 		return -1;
 	}
 

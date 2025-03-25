@@ -259,6 +259,29 @@ static void test_invalid_dag_task(void)
 	bpf_dag_task_free(dag_task);
 }
 
+static void test_invalid_dag_task2(void)
+{
+	s32 ret, i = 0;
+	struct bpf_dag_task *dag_task;
+
+	dag_task = bpf_dag_task_alloc(1000, 0);
+	if (!dag_task) {
+		bpf_printk("Failed to newly allocate a DAG task (src_node_tid=%d).", 1000);
+		return;
+	}
+
+	bpf_for(i, 0, 1000) {
+		ret = bpf_dag_task_add_node(dag_task, 1001 + i, 0);
+		if (ret < 0) {
+			bpf_printk("bpf_for breaks at i=%d", i);
+			break;
+		}
+	}
+	assert(ret < 0);
+
+	bpf_dag_task_free(dag_task);
+}
+
 SEC("struct_ops/my_ops_calculate")
 u64 BPF_PROG(my_ops_calculate, u64 n)
 {
@@ -269,6 +292,7 @@ u64 BPF_PROG(my_ops_calculate, u64 n)
 	bpf_user_ringbuf_drain(&urb, user_ringbuf_callback, NULL, 0);
 
 	test_invalid_dag_task();
+	test_invalid_dag_task2();
 
 	return err;
 }
