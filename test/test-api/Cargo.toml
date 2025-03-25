@@ -1,0 +1,11 @@
+[package]
+name = "test-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dag-task = { path = "../../lib/dag-task", version = "0.1" }
+bpf-comm = { path = "../../lib/bpf-comm", version = "0.1" }
+bpf-comm-api = { path = "../../lib/bpf-comm-api", version = "0.1" }
+dag-bpf = { path = "../../lib/dag-bpf", version = "0.1" }
+libc = "0.2.171"

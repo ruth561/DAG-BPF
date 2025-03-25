@@ -1,0 +1,10 @@
+[package]
+name = "bpf-comm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2"
+libbpf-sys = "=1.5.0"
+libbpf-rs = "0.24"
+is-root = "0.1"
