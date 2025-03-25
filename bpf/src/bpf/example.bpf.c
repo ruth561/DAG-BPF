@@ -282,6 +282,37 @@ static void test_invalid_dag_task2(void)
 	bpf_dag_task_free(dag_task);
 }
 
+static void test_invalid_dag_task3(void)
+{
+	s32 ret, i = 0;
+	struct bpf_dag_task *dag_task;
+
+	dag_task = bpf_dag_task_alloc(1000, 0);
+	assert_ret(dag_task);
+
+	ret = bpf_dag_task_add_node(dag_task, 1001, 0);
+	assert(ret == 1);
+	ret = bpf_dag_task_add_node(dag_task, 1002, 0);
+	assert(ret == 2);
+
+	ret = bpf_dag_task_add_edge(dag_task, 1000, 1001);
+	assert(ret == 0);
+	ret = bpf_dag_task_add_edge(dag_task, 1001, 1002);
+	assert(ret == 1);
+	ret = bpf_dag_task_add_edge(dag_task, 1000, 1002);
+	assert(ret == 2);
+	ret = bpf_dag_task_add_edge(dag_task, 1000, 1001); // duplicate edge
+	assert(ret < 0);
+	ret = bpf_dag_task_add_edge(dag_task, 1002, 1000); // violates topological order!
+	assert(ret < 0);
+	ret = bpf_dag_task_add_edge(dag_task, 1002, 1002); // self-loop
+	assert(ret < 0);
+	ret = bpf_dag_task_add_edge(dag_task, 8888, 1000); // invalid node!
+	assert(ret < 0);
+
+	bpf_dag_task_free(dag_task);
+}
+
 SEC("struct_ops/my_ops_calculate")
 u64 BPF_PROG(my_ops_calculate, u64 n)
 {
@@ -293,6 +324,7 @@ u64 BPF_PROG(my_ops_calculate, u64 n)
 
 	test_invalid_dag_task();
 	test_invalid_dag_task2();
+	test_invalid_dag_task3();
 
 	return err;
 }

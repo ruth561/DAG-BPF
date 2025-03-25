@@ -132,6 +132,18 @@ static u32 cnt_nr_nodes(struct bpf_dag_task *dag_task, s32 tid)
 	return cnt;
 }
 
+static u32 cnt_nr_edges(struct bpf_dag_task *dag_task, u32 from, s32 to)
+{
+	u32 cnt = 0;
+
+	for (int i = 0; i < dag_task->nr_edges; i++) {
+		if (dag_task->edges[i].from == from &&
+		    dag_task->edges[i].to == to)
+			cnt++;
+	}
+	return cnt;
+}
+
 // Returns true if a duplicate is found.
 static bool check_duplication_ins_outs(u32 *buf, u32 nr_elems)
 {
@@ -198,6 +210,31 @@ static bool bpf_dag_task_is_well_formed(struct bpf_dag_task *dag_task)
 				pr_err("node->outs has a duplicate");
 				return false;
 			}
+		}
+	}
+
+	for (int i = 0; i < dag_task->nr_edges; i++) {
+		struct edge_info *edge = &dag_task->edges[i];
+
+		if (!is_in_range(edge->from, 0, dag_task->nr_nodes))
+			return false;
+	
+		if (!is_in_range(edge->to, 0, dag_task->nr_nodes))
+			return false;
+
+		if (cnt_nr_edges(dag_task, edge->from, edge->to) != 1) {
+			pr_err("DAG task has a duplicate edge (%d -> %d)", edge->from , edge->to);
+			return false;
+		}
+
+		if (edge->from == edge->to) {
+			pr_err("DAG task has a self-loop (%d -> %d)", edge->from, edge->to);
+			return false;
+		}
+
+		if (edge->from > edge->to) {
+			pr_err("DAG task isn't sorted in topological order (%d -> %d)", edge->from, edge->to);
+			return false;
 		}
 	}
 	
@@ -312,7 +349,25 @@ static s32 __bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from_tid, 
 		return -1;
 	}
 
+	if (cnt_nr_edges(dag_task, from, to) > 0) {
+		pr_warn("Edge (%d -> %d) already exists in DAG task (%d)",
+			from, to, dag_task->id);
+		return -1;
+	}
+
+	if (from == to) {
+		pr_warn("Self-loop (%d -> %d) is not allowed.", from, to);
+		return -1;
+	}
+
+	if (from > to) {
+		pr_warn("Edge (%d -> %d) violates topological order", from, to);
+		return -1;
+	}
+
 	edge_id = dag_task->nr_edges;
+	dag_task->nr_edges++;
+
 	dag_task->edges[edge_id].from = from;
 	dag_task->edges[edge_id].to = to;
 
