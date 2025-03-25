@@ -70,7 +70,7 @@ static long handle_new_dag_task(struct bpf_dag_msg_new_task_payload *payload)
 		return 1;
 	}
 
-	bpf_printk("Successfully allocates a DAG-task! id=%d", dag_task->id);
+	bpf_printk("Successfully allocates a DAG-task! tid=%d, id=%d", payload->src_node_tid, dag_task->id);
 
 	key = payload->src_node_tid;
 	local.dag_task = NULL;
@@ -170,8 +170,6 @@ static long user_ringbuf_callback(struct bpf_dynptr *dynptr, void *ctx)
 	long err;
 	enum bpf_dag_msg_type type;
 	struct bpf_dag_task *dag_task;
-
-	bpf_printk("user_ring_callback is called!");
 
 	err = bpf_dynptr_read(&type, sizeof(type), dynptr, 0, 0);
 	if (err) {

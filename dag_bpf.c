@@ -316,7 +316,7 @@ __bpf_kfunc s32 bpf_dag_task_add_node(struct bpf_dag_task *dag_task,
  */
  __bpf_kfunc s32 bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from, u32 to)
 {
-return __bpf_dag_task_add_edge(dag_task, from, to);
+	return __bpf_dag_task_add_edge(dag_task, from, to);
 }
 
 __bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task)
