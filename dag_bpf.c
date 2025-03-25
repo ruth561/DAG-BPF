@@ -107,6 +107,11 @@ static struct bpf_struct_ops bpf_my_ops = {
 // The maximum of the number of DAG tasks.
 #define BPF_DAG_TASK_LIMIT 10
 
+/*
+ * Data structure for managing all DAG tasks.
+ *
+ * TODO: Protect with mutual exclusion
+ */
 struct bpf_dag_task_manager {
 	u32			nr_dag_tasks;
 	bool			inuse[BPF_DAG_TASK_LIMIT];
@@ -115,9 +120,9 @@ struct bpf_dag_task_manager {
 
 static struct bpf_dag_task_manager bpf_dag_task_manager;
 
-static void bpf_dag_task_manager_init(void)
+static __init void bpf_dag_task_manager_init(void)
 {
-	pr_info("bpf_dag_task_manager_init");
+	pr_info("[*] bpf_dag_task_manager_init");
 	bpf_dag_task_manager.nr_dag_tasks = 0;
 	for (int i = 0; i < BPF_DAG_TASK_LIMIT; i++) {
 		bpf_dag_task_manager.inuse[i] = false;
@@ -229,10 +234,11 @@ __bpf_kfunc struct bpf_dag_task *bpf_dag_task_alloc(u32 src_node_tid,
 	s32 err;
 	struct bpf_dag_task *dag_task = NULL;
 
-	pr_info("bpf_dag_task_alloc\n");
+	pr_info("[*] bpf_dag_task_alloc (src_node_tid=%d, src_node_weight=%d)\n",
+		src_node_tid, src_node_weight);
 
 	if (bpf_dag_task_manager.nr_dag_tasks >= BPF_DAG_TASK_LIMIT) {
-		pr_err("DAG-BPF: bpf_dag_task_alloc: There is no slots for a DAG task.");
+		pr_err("There is no slots for a DAG task.");
 		return NULL;
 	}
 

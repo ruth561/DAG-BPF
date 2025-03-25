@@ -98,7 +98,7 @@ static long handle_new_dag_task(struct bpf_dag_msg_new_task_payload *payload)
 
 static inline long handle_add_node(struct bpf_dag_msg_add_node_payload *payload)
 {
-	s32 key;
+	s32 key, node_id;
 	void *value;
 	struct bpf_dag_task *dag_task, *old;
 	struct dag_tasks_map_value *v;
@@ -116,11 +116,17 @@ static inline long handle_add_node(struct bpf_dag_msg_add_node_payload *payload)
 		return -1;
 	}
 
-	bpf_dag_task_add_node(dag_task, payload->tid, payload->weight);
+	node_id = bpf_dag_task_add_node(dag_task, payload->tid, payload->weight);
 
 	bpf_dag_task_dump(dag_task);
 
-	bpf_printk("Successfully add a node (tid=%d) to a DAG-task (id=%d)", payload->tid, dag_task->id);
+	if (node_id >= 0) {
+		bpf_printk("Successfully add a node (tid=%d, node_id=%d) to a DAG-task (id=%d)",
+			payload->tid, node_id, dag_task->id);
+	} else {
+		bpf_printk("Failed to add a node (tid=%d) to a DAG-task (id=%d)",
+			payload->tid, dag_task->id);
+	}
 
 	old = bpf_kptr_xchg(&v->dag_task, dag_task);
 
@@ -132,7 +138,7 @@ static inline long handle_add_node(struct bpf_dag_msg_add_node_payload *payload)
 
 static inline long handle_add_edge(struct bpf_dag_msg_add_edge_payload *payload)
 {
-	s32 key;
+	s32 key, edge_id;
 	void *value;
 	struct bpf_dag_task *dag_task, *old;
 	struct dag_tasks_map_value *v;
@@ -150,12 +156,17 @@ static inline long handle_add_edge(struct bpf_dag_msg_add_edge_payload *payload)
 		return -1;
 	}
 
-	bpf_dag_task_add_edge(dag_task, payload->from_tid, payload->to_tid);
+	edge_id = bpf_dag_task_add_edge(dag_task, payload->from_tid, payload->to_tid);
 
 	bpf_dag_task_dump(dag_task);
 
-	bpf_printk("Successfully add a edge (%d -> %d) to a DAG-task (id=%d)",
-		payload->from_tid, payload->to_tid, dag_task->id);
+	if (edge_id >= 0) {
+		bpf_printk("Successfully add a edge (%d -> %d, edge_id=%d) to a DAG-task (id=%d)",
+			payload->from_tid, payload->to_tid, edge_id, dag_task->id);
+	} else {
+		bpf_printk("Failed to add a edge (%d -> %d) to a DAG-task (id=%d)",
+			payload->from_tid, payload->to_tid, dag_task->id);
+	}
 
 	old = bpf_kptr_xchg(&v->dag_task, dag_task);
 
