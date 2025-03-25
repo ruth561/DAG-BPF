@@ -506,7 +506,7 @@ __bpf_kfunc s32 bpf_dag_task_add_node(struct bpf_dag_task *dag_task,
  *
  * @retval: -1 if it was failed, otherwise returns edge_id.
  */
- __bpf_kfunc s32 bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from, u32 to)
+__bpf_kfunc s32 bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from, u32 to)
 {
 	return __bpf_dag_task_add_edge(dag_task, from, to);
 }
