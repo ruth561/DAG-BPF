@@ -22,6 +22,13 @@ enum bpf_dag_msg_type {
 	BPF_DAG_MSG_NEW_TASK,	// 新しいDAGタスクが作成されたことを伝えるメッセージ（DAGタスクの識別番号はsrc nodeのtid）
 	BPF_DAG_MSG_ADD_NODE,
 	BPF_DAG_MSG_ADD_EDGE,
+	BPF_DAG_MSG_COMMIT,	// TODO: このメッセージでやりたいこと
+				//	1. DAGタスクがwell-formedか？
+				//		- 連結か？
+				//		- トポロジカルソートされているか？
+				//		- 変な遷移辺がないか？
+				//		- etc..
+				//	2. 以降のDAGタスクの形状の変更を禁止する
 };
 
 struct bpf_dag_msg_new_task_payload {
@@ -39,6 +46,10 @@ struct bpf_dag_msg_add_edge_payload {
 	u32 dag_task_id;
 	u32 from_tid;
 	u32 to_tid;
+};
+
+struct bpf_dag_msg_commit_payload {
+	u32 dag_task_id;
 };
 
 #endif /* __MY_OPS_KFUNCS_H */
