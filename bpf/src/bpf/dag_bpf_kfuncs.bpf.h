@@ -17,6 +17,7 @@ extern void bpf_dag_task_dump(struct bpf_dag_task *dag_task) __weak __ksym;
 extern void bpf_dag_task_free(struct bpf_dag_task *dag_task) __weak __ksym;
 extern s32 bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, u32 weight) __weak __ksym;
 extern s32 bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from, u32 to) __weak __ksym;
+extern void bpf_dag_task_culc_HELT_prio(struct bpf_dag_task *dag_task) __weak __ksym;
 
 enum bpf_dag_msg_type {
 	BPF_DAG_MSG_NEW_TASK,	// 新しいDAGタスクが作成されたことを伝えるメッセージ（DAGタスクの識別番号はsrc nodeのtid）

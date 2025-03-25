@@ -526,6 +526,29 @@ __bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task)
 	WARN_ON(true); // unreachable
 }
 
+__bpf_kfunc void bpf_dag_task_culc_HELT_prio(struct bpf_dag_task *dag_task)
+{
+	if (dag_task->nr_nodes == 0)
+		return;
+
+	for (s32 i = dag_task->nr_nodes - 1; i >= 0; i--) {
+		struct node_info *curr_node = &dag_task->nodes[i];
+
+		if (curr_node->nr_outs == 0) {
+			curr_node->prio = curr_node->weight;
+		} else {
+			u32 tail_weight_max = 0;
+			for (int j = 0; j < curr_node->nr_outs; j++) {
+				int node_id = curr_node->outs[j];
+				struct node_info *node = &dag_task->nodes[node_id];
+				u32 tail_weight_curr = node->prio;
+				tail_weight_max = tail_weight_max < tail_weight_curr ? tail_weight_curr : tail_weight_max;
+			}
+			curr_node->prio = curr_node->weight + tail_weight_max;
+		}
+	}
+}
+
 __bpf_kfunc void bpf_dag_task_release_dtor(void *dag_task)
 {
 	pr_info("[*] bpf_dag_task_release_dtor\n");
@@ -549,6 +572,7 @@ BTF_ID_FLAGS(func, bpf_dag_task_alloc, KF_ACQUIRE | KF_RET_NULL)
 BTF_ID_FLAGS(func, bpf_dag_task_free, KF_RELEASE)
 BTF_ID_FLAGS(func, bpf_dag_task_add_node, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_add_edge, KF_TRUSTED_ARGS)
+BTF_ID_FLAGS(func, bpf_dag_task_culc_HELT_prio, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_dump)
 BTF_KFUNCS_END(my_ops_kfunc_ids)
 

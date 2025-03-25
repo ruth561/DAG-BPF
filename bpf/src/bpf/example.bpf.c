@@ -313,6 +313,52 @@ static void test_invalid_dag_task3(void)
 	bpf_dag_task_free(dag_task);
 }
 
+static void test_culc_HELT_prio(void)
+{
+	s32 ret, i = 0;
+	struct bpf_dag_task *dag_task;
+
+	/*
+	 * 1000(1) --+--> 1001(3) --+
+	 *           |              +--> 1004(1) -----> 1005(1) --+
+	 *           +--> 1002(1) --+                             |
+	 *           |                                            +--> 1006(1)
+	 *           +--> 1003(2) --------------------------------+
+	 *
+	 * expected result:
+	 *	1000's prio: 7
+	 *	1001's prio: 6
+	 *	1002's prio: 4
+	 *	1003's prio: 3
+	 *	1004's prio: 3
+	 *	1005's prio: 2
+	 *	1006's prio: 1
+	 */
+	dag_task = bpf_dag_task_alloc(1000, 1);
+	assert_ret(dag_task);
+
+	assert(bpf_dag_task_add_node(dag_task, 1001, 3) >= 0);
+	assert(bpf_dag_task_add_node(dag_task, 1002, 1) >= 0);
+	assert(bpf_dag_task_add_node(dag_task, 1003, 2) >= 0);
+	assert(bpf_dag_task_add_node(dag_task, 1004, 1) >= 0);
+	assert(bpf_dag_task_add_node(dag_task, 1005, 1) >= 0);
+	assert(bpf_dag_task_add_node(dag_task, 1006, 1) >= 0);
+
+	assert(bpf_dag_task_add_edge(dag_task, 1000, 1001) >= 0);
+	assert(bpf_dag_task_add_edge(dag_task, 1000, 1002) >= 0);
+	assert(bpf_dag_task_add_edge(dag_task, 1000, 1003) >= 0);
+	assert(bpf_dag_task_add_edge(dag_task, 1001, 1004) >= 0);
+	assert(bpf_dag_task_add_edge(dag_task, 1002, 1004) >= 0);
+	assert(bpf_dag_task_add_edge(dag_task, 1003, 1006) >= 0);
+	assert(bpf_dag_task_add_edge(dag_task, 1004, 1005) >= 0);
+	assert(bpf_dag_task_add_edge(dag_task, 1005, 1006) >= 0);
+
+	bpf_dag_task_culc_HELT_prio(dag_task);
+	bpf_dag_task_dump(dag_task);
+
+	bpf_dag_task_free(dag_task);
+}
+
 SEC("struct_ops/my_ops_calculate")
 u64 BPF_PROG(my_ops_calculate, u64 n)
 {
@@ -325,6 +371,8 @@ u64 BPF_PROG(my_ops_calculate, u64 n)
 	test_invalid_dag_task();
 	test_invalid_dag_task2();
 	test_invalid_dag_task3();
+
+	test_culc_HELT_prio();
 
 	return err;
 }
