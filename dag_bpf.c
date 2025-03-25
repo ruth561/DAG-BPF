@@ -121,6 +121,38 @@ static bool is_in_range_eq(s32 val, s32 low, s32 high)
 	return (low <= high) && (low <= val && val <= high);
 }
 
+static u32 cnt_nr_nodes(struct bpf_dag_task *dag_task, s32 tid)
+{
+	u32 cnt = 0;
+
+	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		if (dag_task->nodes[i].tid == tid)
+			cnt++;
+	}
+	return cnt;
+}
+
+// Returns true if a duplicate is found.
+static bool check_duplication_ins_outs(u32 *buf, u32 nr_elems)
+{
+	bool visited[DAG_TASK_MAX_NODES];
+
+	WARN_ON_ONCE(nr_elems > DAG_TASK_MAX_NODES);
+
+	for (int i = 0; i < DAG_TASK_MAX_NODES; i++) {
+		visited[i] = false;
+	}
+
+	for (int i = 0; i < nr_elems; i++) {
+		if (visited[buf[i]])
+			return true;
+		visited[buf[i]] = true;
+	}
+
+	return false;
+}
+
+// debug function
 static bool bpf_dag_task_is_well_formed(struct bpf_dag_task *dag_task)
 {
 	if (!is_in_range(dag_task->id, 0, BPF_DAG_TASK_LIMIT))
@@ -133,11 +165,40 @@ static bool bpf_dag_task_is_well_formed(struct bpf_dag_task *dag_task)
 		return false;
 
 	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		struct node_info *node = &dag_task->nodes[i];
+
 		if (!is_in_range_eq(dag_task->nodes[i].nr_ins, 0, DAG_TASK_MAX_DEG))
 			return false;
 		
 		if (!is_in_range_eq(dag_task->nodes[i].nr_outs, 0, DAG_TASK_MAX_DEG))
 			return false;
+
+		if (cnt_nr_nodes(dag_task, node->tid) != 1) {
+			pr_err("DAG task has two or more node that share the same tid (=%d)", node->tid);
+			return false;
+		}
+
+		for (int j = 0; j < node->nr_ins; j++) {
+			if (!is_in_range(node->ins[j], 0, dag_task->nr_nodes)) {
+				pr_err("node->ins[%d](=%d) is out of range.", j, node->ins[j]);
+				return false;
+			}
+
+			if (!is_in_range(node->outs[j], 0, dag_task->nr_nodes)) {
+				pr_err("node->outs[%d](=%d) is out of range.", j, node->outs[j]);
+				return false;
+			}
+
+			if (check_duplication_ins_outs(node->ins, node->nr_ins)) {
+				pr_err("node->ins has a duplicate");
+				return false;
+			}
+
+			if (check_duplication_ins_outs(node->outs, node->nr_outs)) {
+				pr_err("node->outs has a duplicate");
+				return false;
+			}
+		}
 	}
 	
 	return true;
@@ -196,6 +257,11 @@ static s32 __bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, u32 w
 
 	if (dag_task->nr_nodes == DAG_TASK_MAX_NODES) {
 		pr_warn("The maximum number of DAG nodes (%d) has been reached.", DAG_TASK_MAX_NODES);
+		return -1;
+	}
+
+	if (cnt_nr_nodes(dag_task, tid) > 0) {
+		pr_warn("node (tid=%d) already exists.", tid);
 		return -1;
 	}
 
