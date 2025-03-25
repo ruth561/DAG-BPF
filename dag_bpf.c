@@ -107,6 +107,42 @@ static struct bpf_struct_ops bpf_my_ops = {
 // The maximum of the number of DAG tasks.
 #define BPF_DAG_TASK_LIMIT 10
 
+// Returns true if val is in the range [low, high).
+// Returns false otherwise.
+static bool is_in_range(s32 val, s32 low, s32 high)
+{
+	return (low < high) && (low <= val && val < high);
+}
+
+// Returns true if val is in the range [low, high].
+// Returns false otherwise.
+static bool is_in_range_eq(s32 val, s32 low, s32 high)
+{
+	return (low <= high) && (low <= val && val <= high);
+}
+
+static bool bpf_dag_task_is_well_formed(struct bpf_dag_task *dag_task)
+{
+	if (!is_in_range(dag_task->id, 0, BPF_DAG_TASK_LIMIT))
+		return false;
+
+	if (!is_in_range_eq(dag_task->nr_nodes, 0, DAG_TASK_MAX_NODES))
+		return false;
+
+	if (!is_in_range_eq(dag_task->nr_edges, 0, DAG_TASK_MAX_EDGES))
+		return false;
+
+	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		if (!is_in_range_eq(dag_task->nodes[i].nr_ins, 0, DAG_TASK_MAX_DEG))
+			return false;
+		
+		if (!is_in_range_eq(dag_task->nodes[i].nr_outs, 0, DAG_TASK_MAX_DEG))
+			return false;
+	}
+	
+	return true;
+}
+
 /*
  * Data structure for managing all DAG tasks.
  *
@@ -120,6 +156,27 @@ struct bpf_dag_task_manager {
 
 static struct bpf_dag_task_manager bpf_dag_task_manager;
 
+static bool bpf_dag_task_manager_is_well_formed(void)
+{
+	u32 inuse_cnt;
+
+	if (!(0 <= bpf_dag_task_manager.nr_dag_tasks &&
+	      bpf_dag_task_manager.nr_dag_tasks <= BPF_DAG_TASK_LIMIT)) {
+		return false;
+	}
+
+	inuse_cnt = 0;
+	for (int i = 0; i < BPF_DAG_TASK_LIMIT; i++) {
+		if (bpf_dag_task_manager.inuse[i]) {
+			inuse_cnt++;
+			if (!bpf_dag_task_is_well_formed(&bpf_dag_task_manager.dag_tasks[i]))
+				return false;
+		}
+	}
+
+	return bpf_dag_task_manager.nr_dag_tasks == inuse_cnt;
+}
+
 static __init void bpf_dag_task_manager_init(void)
 {
 	pr_info("[*] bpf_dag_task_manager_init");
@@ -128,6 +185,8 @@ static __init void bpf_dag_task_manager_init(void)
 		bpf_dag_task_manager.inuse[i] = false;
 		bpf_dag_task_manager.dag_tasks[i].id = i;
 	}
+
+	WARN_ON_ONCE(!bpf_dag_task_manager_is_well_formed()); // TODO: check only when debug mode
 }
 
 // MARK: bpf_dag_task API
@@ -146,6 +205,8 @@ static s32 __bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, u32 w
 	dag_task->nodes[node_id].weight = weight;
 	dag_task->nodes[node_id].nr_ins = 0;
 	dag_task->nodes[node_id].nr_outs = 0;
+
+	WARN_ON_ONCE(!bpf_dag_task_manager_is_well_formed()); // TODO: check only when debug mode
 
 	return node_id;
 }
@@ -197,6 +258,8 @@ static s32 __bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from_tid, 
 	dag_task->nodes[to].ins[nr_ins] = from;
 	dag_task->nodes[to].nr_ins++;
 
+	WARN_ON_ONCE(!bpf_dag_task_manager_is_well_formed()); // TODO: check only when debug mode
+
 	return edge_id;
 }
 
@@ -214,6 +277,8 @@ static s32 bpf_dag_task_init(struct bpf_dag_task *dag_task, u32 src_node_tid, u3
 	WARN_ON(ret != 0);
 	WARN_ON(dag_task->nr_nodes != 1);
 	WARN_ON(dag_task->nr_edges != 0);
+
+	WARN_ON_ONCE(!bpf_dag_task_manager_is_well_formed()); // TODO: check only when debug mode
 
 	return 0;
 }
