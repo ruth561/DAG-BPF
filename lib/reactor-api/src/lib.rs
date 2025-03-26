@@ -15,6 +15,7 @@ use std::vec;
 use bpf_comm::urb::UserRingBuffer;
 use dag_bpf::send_dag_task_to_bpf;
 use linux_utils::gettid;
+use linux_utils::prctl_set_name;
 use linux_utils::LinuxTid;
 use dag_task::dag::TaskGraphBuilder;
 
@@ -101,7 +102,10 @@ fn register_subscription(tid: LinuxTid, subscribe_topic_names: &Vec<Cow<'static,
 /// 	vec![Cow::from("topic2"), Cow::from("topic3")]
 /// );
 /// handle.join().unwrap();
+/// 
+/// The reactor name will be set to `task_struct->comm`.
 pub fn spawn_reactor<F>(
+	reactor_name: Cow<'static, str>,
 	f: F,
 	subscribe_topic_names: Vec<Cow<'static, str>>,
 	publish_topic_names: Vec<Cow<'static, str>>,
@@ -115,6 +119,7 @@ where
 	let publish_topic_names_cloned = publish_topic_names.clone();
 
 	let handle = std::thread::spawn(move || {
+		prctl_set_name(reactor_name);
 		let tid = gettid();
 		tid_tx.send(tid).unwrap();
 		println!("Thread (tid={tid}) is spawned!");
@@ -153,6 +158,7 @@ where
 /// let f = || -> Vec<MsgItem> { ... }
 /// spawn_reactor()
 pub fn spawn_periodic_reactor<F>(
+	reactor_name: Cow<'static, str>,
 	f: F,
 	publish_topic_names: Vec<Cow<'static, str>>,
 	period: Duration,
@@ -164,6 +170,7 @@ where
 	let publish_topic_names_cloned = publish_topic_names.clone();
 
 	let handle = std::thread::spawn(move || {
+		prctl_set_name(reactor_name);
 		let tid = gettid();
 		tid_tx.send(tid).unwrap();
 		println!("Thread (tid={tid}) is spawned!");

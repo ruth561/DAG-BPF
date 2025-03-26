@@ -29,6 +29,7 @@ fn main()
 		ret
 	};
 	let (tid, handle) = spawn_periodic_reactor(
+		Cow::from("task0"),
 		f,
 		vec![Cow::from("topic0")],
 		Duration::from_secs(1),
@@ -43,6 +44,7 @@ fn main()
 		v
 	};
 	let (tid, handle) = spawn_reactor(
+		Cow::from("task1"),
 		f,
 		vec![Cow::from("topic0")],
 		vec![Cow::from("topic1")],
@@ -57,6 +59,7 @@ fn main()
 		vec![]
 	};
 	let (tid, handle) = spawn_reactor(
+		Cow::from("task2"),
 		f,
 		vec![Cow::from("topic1")],
 		vec![],
