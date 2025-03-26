@@ -84,8 +84,20 @@ fn register_subscription(tid: LinuxTid, subscribe_topic_names: &Vec<Cow<'static,
 	rcvers
 }
 
+/// topic1 (MsgItem::U32(u32))       topic3 (MsgItem::U32(u32))
+///             |         +-----------+         |
+///             +-------->|  reactor  |-------->+
+///             |         +-----------+         |
+/// topic2 (MsgItem::U32(u32))       topic4 (MsgItem::U32(u32))
+/// 
+/// e.g.)
 /// let f = |v: Vec<MsgItem>| -> Vec<MsgItem> { ... }
-/// spawn_reactor()
+/// let (tid, handle) = spawn_reactor(
+/// 	f,
+/// 	vec![Cow::from("topic0"), Cow::from("topic1")],
+/// 	vec![Cow::from("topic2"), Cow::from("topic3")]
+/// );
+/// handle.join().unwrap();
 pub fn spawn_reactor<F>(
 	f: F,
 	subscribe_topic_names: Vec<Cow<'static, str>>,
