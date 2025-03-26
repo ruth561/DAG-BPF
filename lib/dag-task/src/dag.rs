@@ -1,13 +1,15 @@
 use std::collections::HashSet;
 use std::collections::HashMap;
+use std::borrow::Cow;
 
 use petgraph::algo::toposort;
 use petgraph::algo::DfsSpace;
 use petgraph::graph::DiGraph;
 
+use linux_utils::LinuxTid;
 
 // similar to a thread id
-pub type Reactor = usize;
+pub type Reactor = LinuxTid;
 
 #[derive(Debug)]
 pub struct DagTask {
@@ -120,7 +122,7 @@ impl TaskGraph {
 			for node in &nodes {
 				if reachable_nodes.contains(node) {
 					let reactor = self.task_to_reactor[*node];
-					node_to_reactor.push(reactor);
+					node_to_reactor.push(reactor.clone());
 					reactor_to_node.insert(reactor, node_to_reactor.len() - 1);
 				}
 			}
@@ -156,9 +158,9 @@ impl TaskGraph {
 #[derive(Debug)]
 pub struct TaskGraphBuilder {
 	pub reactors: HashSet<Reactor>,
-	pub subs: HashMap<String, HashSet<Reactor>>, // topic name -> [reactor id]
-	pub pubs: HashMap<String, HashSet<Reactor>>, // topic name -> [reactor id]
-	pub topics: HashSet<String>,
+	pub subs: HashMap<Cow<'static, str>, HashSet<Reactor>>, // topic name -> [reactor id]
+	pub pubs: HashMap<Cow<'static, str>, HashSet<Reactor>>, // topic name -> [reactor id]
+	pub topics: HashSet<Cow<'static, str>>,
 }
 
 impl TaskGraphBuilder {
@@ -172,7 +174,7 @@ impl TaskGraphBuilder {
 	}
 
 	/// @reactor: Reactor id
-	pub fn reg_reactor(&mut self, reactor: Reactor, subs: Vec<String>, pubs: Vec<String>) {
+	pub fn reg_reactor(&mut self, reactor: Reactor, subs: Vec<Cow<'static, str>>, pubs: Vec<Cow<'static, str>>) {
 		assert!(!self.reactors.contains(&reactor));
 
 		for s in &subs {
@@ -254,11 +256,11 @@ fn test_dag_tasks_0()
 {
 	let mut builder = TaskGraphBuilder::new();
 
-	builder.reg_reactor(0, vec![], vec!["topic0".to_string()]);
-	builder.reg_reactor(1, vec!["topic0".to_string()], vec!["topic1".to_string(), "topic2".to_string()]);
-	builder.reg_reactor(2, vec!["topic1".to_string()], vec!["topic3".to_string()]);
-	builder.reg_reactor(3, vec!["topic2".to_string()], vec!["topic4".to_string()]);
-	builder.reg_reactor(4, vec!["topic3".to_string(), "topic4".to_string()], vec![]);
+	builder.reg_reactor(0, vec![], vec![Cow::from("topic0")]);
+	builder.reg_reactor(1, vec![Cow::from("topic0")], vec![Cow::from("topic1"), Cow::from("topic2")]);
+	builder.reg_reactor(2, vec![Cow::from("topic1")], vec![Cow::from("topic3")]);
+	builder.reg_reactor(3, vec![Cow::from("topic2")], vec![Cow::from("topic4")]);
+	builder.reg_reactor(4, vec![Cow::from("topic3"), Cow::from("topic4")], vec![]);
 
 	let task_graph = builder.build();
 	let dag_tasks = task_graph.to_dag_tasks().unwrap();
@@ -273,11 +275,11 @@ fn test_dag_tasks_1()
 {
 	let mut builder = TaskGraphBuilder::new();
 
-	builder.reg_reactor(4, vec![], vec!["topic0".to_string()]);
-	builder.reg_reactor(3, vec!["topic0".to_string()], vec!["topic1".to_string(), "topic2".to_string()]);
-	builder.reg_reactor(0, vec!["topic1".to_string()], vec!["topic3".to_string()]);
-	builder.reg_reactor(2, vec!["topic2".to_string()], vec!["topic4".to_string()]);
-	builder.reg_reactor(1, vec!["topic3".to_string(), "topic4".to_string()], vec![]);
+	builder.reg_reactor(4, vec![], vec![Cow::from("topic0")]);
+	builder.reg_reactor(3, vec![Cow::from("topic0")], vec![Cow::from("topic1"), Cow::from("topic2")]);
+	builder.reg_reactor(0, vec![Cow::from("topic1")], vec![Cow::from("topic3")]);
+	builder.reg_reactor(2, vec![Cow::from("topic2")], vec![Cow::from("topic4")]);
+	builder.reg_reactor(1, vec![Cow::from("topic3"), Cow::from("topic4")], vec![]);
 
 	let task_graph = builder.build();
 	let dag_tasks = task_graph.to_dag_tasks().unwrap();
@@ -300,9 +302,9 @@ fn test_non_dag_task()
 {
 	let mut builder = TaskGraphBuilder::new();
 
-	builder.reg_reactor(0, vec!["topic2".to_string()], vec!["topic0".to_string()]);
-	builder.reg_reactor(1, vec!["topic0".to_string()], vec!["topic1".to_string()]);
-	builder.reg_reactor(2, vec!["topic1".to_string()], vec!["topic2".to_string()]);
+	builder.reg_reactor(0, vec![Cow::from("topic2")], vec![Cow::from("topic0")]);
+	builder.reg_reactor(1, vec![Cow::from("topic0")], vec![Cow::from("topic1")]);
+	builder.reg_reactor(2, vec![Cow::from("topic1")], vec![Cow::from("topic2")]);
 
 	let task_graph = builder.build();
 	let dag_tasks = task_graph.to_dag_tasks();
@@ -320,12 +322,12 @@ fn test_dag_tasks_2()
 {
 	let mut builder = TaskGraphBuilder::new();
 
-	builder.reg_reactor(0, vec!["topic2".to_string()], vec![]);
-	builder.reg_reactor(1, vec!["topic0".to_string()], vec!["topic1".to_string()]);
-	builder.reg_reactor(2, vec![], vec!["topic0".to_string()]);
-	builder.reg_reactor(3, vec![], vec!["topic3".to_string()]);
-	builder.reg_reactor(4, vec!["topic0".to_string(), "topic1".to_string()], vec![]);
-	builder.reg_reactor(5, vec!["topic3".to_string()], vec!["topic2".to_string()]);
+	builder.reg_reactor(0, vec![Cow::from("topic2")], vec![]);
+	builder.reg_reactor(1, vec![Cow::from("topic0")], vec![Cow::from("topic1")]);
+	builder.reg_reactor(2, vec![], vec![Cow::from("topic0")]);
+	builder.reg_reactor(3, vec![], vec![Cow::from("topic3")]);
+	builder.reg_reactor(4, vec![Cow::from("topic0"), Cow::from("topic1")], vec![]);
+	builder.reg_reactor(5, vec![Cow::from("topic3")], vec![Cow::from("topic2")]);
 
 	let task_graph = builder.build();
 	let dag_tasks = task_graph.to_dag_tasks().unwrap();

@@ -1,3 +1,5 @@
+use linux_utils::LinuxTid;
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 enum MsgType {
@@ -9,24 +11,24 @@ enum MsgType {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct MsgNewTaskPayload {
-	src_node_tid: u32,
+	src_node_tid: LinuxTid,
 	src_node_weight: u32,
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct MsgAddNodePayload {
-	dag_task_id: u32,
-	tid: u32,
+	dag_task_id: LinuxTid,
+	tid: LinuxTid,
 	weight: u32,
 }
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct MsgAddEdgePayload {
-	dag_task_id: u32,
-	from_tid: u32,
-	to_tid: u32,
+	dag_task_id: LinuxTid,
+	from_tid: LinuxTid,
+	to_tid: LinuxTid,
 }
 
 #[derive(Debug)]
@@ -38,17 +40,17 @@ pub enum DagBpfMsg {
 }
 
 impl DagBpfMsg {
-	pub fn new_task(src_node_tid: u32, src_node_weight: u32) -> Self
+	pub fn new_task(src_node_tid: LinuxTid, src_node_weight: u32) -> Self
 	{
 		DagBpfMsg::NewTask(MsgNewTaskPayload { src_node_tid, src_node_weight, })
 	}
 
-	pub fn add_node(dag_task_id: u32, tid: u32, weight: u32) -> Self
+	pub fn add_node(dag_task_id: LinuxTid, tid: LinuxTid, weight: u32) -> Self
 	{
 		DagBpfMsg::AddNode(MsgAddNodePayload { dag_task_id, tid, weight, })
 	}
 
-	pub fn add_edge(dag_task_id: u32, from_tid: u32, to_tid: u32) -> Self
+	pub fn add_edge(dag_task_id: LinuxTid, from_tid: LinuxTid, to_tid: LinuxTid) -> Self
 	{
 		DagBpfMsg::AddEdge(MsgAddEdgePayload { dag_task_id, from_tid, to_tid, })
 	}

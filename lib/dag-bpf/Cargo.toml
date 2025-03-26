@@ -7,5 +7,6 @@ edition = "2021"
 dag-task = { path = "../../lib/dag-task", version = "0.1" }
 bpf-comm = { path = "../../lib/bpf-comm", version = "0.1" }
 bpf-comm-api = { path = "../../lib/bpf-comm-api", version = "0.1" }
+linux-utils = { path = "../linux-utils", version = "0.1" }
 
 libc = "0.2"

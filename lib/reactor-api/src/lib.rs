@@ -12,8 +12,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::vec;
 
-use dag_bpf::utils::gettid;
-use dag_bpf::utils::LinuxTid;
+use linux_utils::gettid;
+use linux_utils::LinuxTid;
+use dag_task::dag::TaskGraphBuilder;
 
 type Subscriber = (LinuxTid, Sender<MsgItem>);
 
@@ -108,6 +109,8 @@ where
 {
 	// thread::spawnで生成した小スレッドのtidを親スレッドに伝達するための一時的なchannel
 	let (tid_tx, tid_rx) = mpsc::channel();
+	let subscribe_topic_names_cloned = subscribe_topic_names.clone();
+	let publish_topic_names_cloned = publish_topic_names.clone();
 
 	let handle = std::thread::spawn(move || {
 		let tid = gettid();
@@ -134,6 +137,14 @@ where
 
 	let ch_tid = tid_rx.recv().unwrap();
 
+	// Registers a reactor to TaskGraph.
+	let mut task_graph_manager = TASK_GRAPH_MANAGER.lock().unwrap();
+	task_graph_manager.task_graph_builder.reg_reactor(
+		ch_tid,
+		subscribe_topic_names_cloned,
+		publish_topic_names_cloned,
+	);
+
 	Ok((ch_tid, handle))
 } 
 
@@ -148,6 +159,7 @@ where
 	F: Fn() -> Vec<MsgItem> + Send + 'static
 {
 	let (tid_tx, tid_rx) = mpsc::channel();
+	let publish_topic_names_cloned = publish_topic_names.clone();
 
 	let handle = std::thread::spawn(move || {
 		let tid = gettid();
@@ -167,5 +179,38 @@ where
 
 	let ch_tid = tid_rx.recv().unwrap();
 
+	// Registers a reactor to TaskGraph.
+	let mut task_graph_manager = TASK_GRAPH_MANAGER.lock().unwrap();
+	task_graph_manager.task_graph_builder.reg_reactor(
+		ch_tid,
+		vec![],
+		publish_topic_names_cloned,
+	);
+
 	Ok((ch_tid, handle))
 } 
+
+// MARK: task graph manager
+struct TaskGraphManager {
+	commited: bool,
+	task_graph_builder: TaskGraphBuilder, 
+}
+
+static TASK_GRAPH_MANAGER: LazyLock<Mutex<TaskGraphManager>> = LazyLock::new(|| {
+	Mutex::new(TaskGraphManager { commited: false, task_graph_builder: TaskGraphBuilder::new() })
+});
+
+/// Analyzes the information of current spwaned reactors and send it to eBPF program.
+pub fn commit_reactor_info()
+{
+	let mut task_graph_manager = TASK_GRAPH_MANAGER.lock().unwrap();
+	if task_graph_manager.commited {
+		panic!("Task graph has already been commited.");
+	}
+	task_graph_manager.commited = true;
+
+	let task_graph = task_graph_manager.task_graph_builder.build();
+	let dag_tasks = task_graph.to_dag_tasks().unwrap();
+
+	println!("[DEBUG] dag_tasks: {:?}", dag_tasks);
+}

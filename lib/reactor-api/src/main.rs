@@ -1,7 +1,7 @@
 use std::time::Duration;
 use std::borrow::Cow;
 
-use dag_bpf::utils::gettid;
+use linux_utils::gettid;
 use reactor_api::*;
 
 const BUSY_UNIT: usize = 50000;
@@ -64,6 +64,8 @@ fn main()
 	tids.push(tid);
 
 	println!("[*] tids: {:?}", tids);
+
+	commit_reactor_info();
 
 	/* join */
 	for handle in handles {
