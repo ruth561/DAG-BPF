@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
 use std::thread::sleep;
@@ -89,13 +90,16 @@ pub fn spawn_reactor<F>(
 	f: F,
 	subscribe_topic_names: Vec<Cow<'static, str>>,
 	publish_topic_names: Vec<Cow<'static, str>>,
-) -> Result<JoinHandle<()>, Box<dyn Error>>
+) -> Result<(LinuxTid, JoinHandle<()>), Box<dyn Error>>
 where
 	F: Fn(Vec<MsgItem>) -> Vec<MsgItem> + Send + 'static
 {
+	// thread::spawnで生成した小スレッドのtidを親スレッドに伝達するための一時的なchannel
+	let (tid_tx, tid_rx) = mpsc::channel();
 
 	let handle = std::thread::spawn(move || {
 		let tid = gettid();
+		tid_tx.send(tid).unwrap();
 		println!("Thread (tid={tid}) is spawned!");
 
 		// channelを作成する
@@ -116,7 +120,9 @@ where
 		}
 	});
 
-	Ok(handle)
+	let ch_tid = tid_rx.recv().unwrap();
+
+	Ok((ch_tid, handle))
 } 
 
 /// let f = || -> Vec<MsgItem> { ... }
@@ -125,12 +131,16 @@ pub fn spawn_periodic_reactor<F>(
 	f: F,
 	publish_topic_names: Vec<Cow<'static, str>>,
 	period: Duration,
-) -> Result<JoinHandle<()>, Box<dyn Error>>
+) -> Result<(LinuxTid, JoinHandle<()>), Box<dyn Error>>
 where
 	F: Fn() -> Vec<MsgItem> + Send + 'static
 {
+	let (tid_tx, tid_rx) = mpsc::channel();
+
 	let handle = std::thread::spawn(move || {
-		println!("Thread (tid={}) is spawned!", gettid());
+		let tid = gettid();
+		tid_tx.send(tid).unwrap();
+		println!("Thread (tid={tid}) is spawned!");
 
 		loop {
 			sleep(period);
@@ -143,5 +153,7 @@ where
 		}
 	});
 
-	Ok(handle)
+	let ch_tid = tid_rx.recv().unwrap();
+
+	Ok((ch_tid, handle))
 } 

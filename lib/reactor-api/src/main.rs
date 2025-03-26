@@ -18,6 +18,7 @@ fn main()
 	println!("Thread (tid={}) is spawned!", gettid());
 
 	let mut handles = vec![];
+	let mut tids = vec![];
 
 	/* src node */
 	let f = || {
@@ -26,12 +27,13 @@ fn main()
 		let ret = vec![MsgItem::U32(1729)];
 		ret
 	};
-	let src = spawn_periodic_reactor(
+	let (tid, handle) = spawn_periodic_reactor(
 		f,
 		vec![Cow::from("topic0")],
 		Duration::from_secs(1),
 	).unwrap();
-	handles.push(src);
+	handles.push(handle);
+	tids.push(tid);
 
 	/* second node */
 	let f = |v| {
@@ -39,12 +41,13 @@ fn main()
 		busy(1000 * BUSY_UNIT);
 		v
 	};
-	let handle = spawn_reactor(
+	let (tid, handle) = spawn_reactor(
 		f,
 		vec![Cow::from("topic0")],
 		vec![Cow::from("topic1")],
 	).unwrap();
 	handles.push(handle);
+	tids.push(tid);
 
 	/* third node */
 	let f = |v| {
@@ -52,12 +55,15 @@ fn main()
 		busy(1000 * BUSY_UNIT);
 		vec![]
 	};
-	let handle = spawn_reactor(
+	let (tid, handle) = spawn_reactor(
 		f,
 		vec![Cow::from("topic1")],
 		vec![],
 	).unwrap();
 	handles.push(handle);
+	tids.push(tid);
+
+	println!("[*] tids: {:?}", tids);
 
 	/* join */
 	for handle in handles {
