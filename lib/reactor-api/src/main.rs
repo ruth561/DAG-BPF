@@ -1,6 +1,7 @@
 use std::time::Duration;
 use std::borrow::Cow;
 
+use bpf_comm::urb::UserRingBuffer;
 use linux_utils::gettid;
 use reactor_api::*;
 
@@ -65,7 +66,10 @@ fn main()
 
 	println!("[*] tids: {:?}", tids);
 
-	commit_reactor_info();
+	const USER_RING_BUFFER_NAME: &'static str = "urb";
+	let mut urb = UserRingBuffer::new(USER_RING_BUFFER_NAME).unwrap();
+
+	commit_reactor_info(&mut urb);
 
 	/* join */
 	for handle in handles {

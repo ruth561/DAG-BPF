@@ -12,6 +12,8 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::vec;
 
+use bpf_comm::urb::UserRingBuffer;
+use dag_bpf::send_dag_task_to_bpf;
 use linux_utils::gettid;
 use linux_utils::LinuxTid;
 use dag_task::dag::TaskGraphBuilder;
@@ -201,7 +203,7 @@ static TASK_GRAPH_MANAGER: LazyLock<Mutex<TaskGraphManager>> = LazyLock::new(|| 
 });
 
 /// Analyzes the information of current spwaned reactors and send it to eBPF program.
-pub fn commit_reactor_info()
+pub fn commit_reactor_info(urb: &mut UserRingBuffer)
 {
 	let mut task_graph_manager = TASK_GRAPH_MANAGER.lock().unwrap();
 	if task_graph_manager.commited {
@@ -212,5 +214,9 @@ pub fn commit_reactor_info()
 	let task_graph = task_graph_manager.task_graph_builder.build();
 	let dag_tasks = task_graph.to_dag_tasks().unwrap();
 
-	println!("[DEBUG] dag_tasks: {:?}", dag_tasks);
+	println!("[DEBUG commit_reactor_info] dag_tasks: {:?}", dag_tasks);
+
+	for dag_task in &dag_tasks {
+		send_dag_task_to_bpf(urb, dag_task);
+	}
 }
