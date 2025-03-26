@@ -1,6 +1,7 @@
 use std::time::Duration;
 use std::borrow::Cow;
 
+use dag_bpf::utils::gettid;
 use reactor_api::*;
 
 const BUSY_UNIT: usize = 50000;
@@ -14,6 +15,8 @@ fn busy(weight: usize)
 
 fn main()
 {
+	println!("Thread (tid={}) is spawned!", gettid());
+
 	let mut handles = vec![];
 
 	/* src node */

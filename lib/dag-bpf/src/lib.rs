@@ -1,3 +1,5 @@
+pub mod utils;
+
 use bpf_comm::urb::UserRingBuffer;
 use bpf_comm_api::dag_bpf::DagBpfMsg;
 use dag_task::dag::DagTask;

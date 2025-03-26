@@ -11,8 +11,10 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::vec;
 
-type Tid = u32;
-type Subscriber = (Tid, Sender<MsgItem>);
+use dag_bpf::utils::gettid;
+use dag_bpf::utils::LinuxTid;
+
+type Subscriber = (LinuxTid, Sender<MsgItem>);
 
 struct Topic {
 	subscribers: Vec<Subscriber>,
@@ -27,14 +29,14 @@ static TOPIC_MANAGER: LazyLock<Mutex<TopicManager>> = LazyLock::new(|| {
 });
 
 impl TopicManager {
-	fn subscribe(&mut self, topic_name: Cow<'static, str>, sender: Sender<MsgItem>)
+	fn subscribe(&mut self, topic_name: Cow<'static, str>, tid: LinuxTid, sender: Sender<MsgItem>)
 	{
-		println!("subscribe: {}, sender={sender:?}", topic_name);
+		println!("[sub] Thread (tid={tid}) subscribes the topic \"{}\"", topic_name);
 
 		if let Some(topic) = self.topics.get_mut(&topic_name) {
-			topic.subscribers.push((1729, sender));
+			topic.subscribers.push((tid, sender));
 		} else {
-			let subscribers = vec![(1729, sender)];
+			let subscribers = vec![(tid, sender)];
 			let topic = Topic {
 				subscribers
 			};
@@ -48,7 +50,7 @@ impl TopicManager {
 
 		if let Some(topic) = self.topics.get_mut(&topic_name) {
 			for (tid, subscriber) in &mut topic.subscribers {
-				println!("[pub] publish to thread{tid}: msg={msg:?}");
+				println!("[pub] publish to thread (tid={tid}): msg={msg:?}");
 				subscriber.send(msg.clone()).unwrap();
 			}
 		} else {
@@ -68,14 +70,14 @@ pub enum MsgItem {
 	U32(u32),
 }
 
-fn register_subscription(subscribe_topic_names: &Vec<Cow<'static, str>>) -> Vec<Receiver<MsgItem>>
+fn register_subscription(tid: LinuxTid, subscribe_topic_names: &Vec<Cow<'static, str>>) -> Vec<Receiver<MsgItem>>
 {
 	let mut manager = TOPIC_MANAGER.lock().unwrap();
 
 	let mut rcvers = vec![];
 	for topic in subscribe_topic_names {
 		let (snder, rcver) = std::sync::mpsc::channel();
-		manager.subscribe(topic.clone(), snder);
+		manager.subscribe(topic.clone(), tid, snder);
 		rcvers.push(rcver);
 	}
 	rcvers
@@ -93,10 +95,11 @@ where
 {
 
 	let handle = std::thread::spawn(move || {
-		println!("Thread is spawned!");
+		let tid = gettid();
+		println!("Thread (tid={tid}) is spawned!");
 
 		// channelを作成する
-		let rcvrs = register_subscription(&subscribe_topic_names);
+		let rcvrs = register_subscription(tid, &subscribe_topic_names);
 
 		loop {
 			let mut args = vec![];
@@ -113,8 +116,6 @@ where
 		}
 	});
 
-	println!("Thread {:?} is spawned", handle.thread().id());
-
 	Ok(handle)
 } 
 
@@ -129,7 +130,8 @@ where
 	F: Fn() -> Vec<MsgItem> + Send + 'static
 {
 	let handle = std::thread::spawn(move || {
-		println!("Thread is spawned!");
+		println!("Thread (tid={}) is spawned!", gettid());
+
 		loop {
 			sleep(period);
 
@@ -140,8 +142,6 @@ where
 			}
 		}
 	});
-
-	println!("Thread {:?} is spawned", handle.thread().id());
 
 	Ok(handle)
 } 
