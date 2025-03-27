@@ -55,7 +55,7 @@ struct {
 
 static long handle_new_dag_task(struct bpf_dag_msg_new_task_payload *payload)
 {
-	s32 key;
+	s32 key, ret;
 	void *value;
 	struct bpf_dag_task *dag_task, *old;
 	long status;
@@ -68,6 +68,11 @@ static long handle_new_dag_task(struct bpf_dag_msg_new_task_payload *payload)
 	}
 
 	bpf_printk("Successfully allocates a DAG-task! tid=%d, id=%d", payload->src_node_tid, dag_task->id);
+
+	ret = bpf_dag_task_set_weight(dag_task, 0, 42);
+	assert(!ret);
+	ret = bpf_dag_task_get_weight(dag_task, 0);
+	assert(ret == 42);
 
 	key = payload->src_node_tid;
 	local.dag_task = NULL;
