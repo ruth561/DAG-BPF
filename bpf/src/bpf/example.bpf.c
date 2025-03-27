@@ -53,9 +53,6 @@ struct {
 	__uint(max_entries, USER_RINGBUF_SIZE);
 } urb SEC(".maps");
 
-#define MSG_GBUF_SIZE	100 * 1000
-static u32 msg_gbuf[MSG_GBUF_SIZE];
-
 static long handle_new_dag_task(struct bpf_dag_msg_new_task_payload *payload)
 {
 	s32 key;
