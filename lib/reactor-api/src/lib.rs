@@ -14,6 +14,7 @@ use std::vec;
 
 use bpf_comm::urb::UserRingBuffer;
 use dag_bpf::send_dag_task_to_bpf;
+use dag_task::dag::TaskWeight;
 use linux_utils::gettid;
 use linux_utils::prctl_set_name;
 use linux_utils::LinuxTid;
@@ -109,6 +110,7 @@ pub fn spawn_reactor<F>(
 	f: F,
 	subscribe_topic_names: Vec<Cow<'static, str>>,
 	publish_topic_names: Vec<Cow<'static, str>>,
+	weight: TaskWeight,
 ) -> Result<(LinuxTid, JoinHandle<()>), Box<dyn Error>>
 where
 	F: Fn(Vec<MsgItem>) -> Vec<MsgItem> + Send + 'static
@@ -150,6 +152,7 @@ where
 		ch_tid,
 		subscribe_topic_names_cloned,
 		publish_topic_names_cloned,
+		weight,
 	);
 
 	Ok((ch_tid, handle))
@@ -162,6 +165,7 @@ pub fn spawn_periodic_reactor<F>(
 	f: F,
 	publish_topic_names: Vec<Cow<'static, str>>,
 	period: Duration,
+	weight: TaskWeight,
 ) -> Result<(LinuxTid, JoinHandle<()>), Box<dyn Error>>
 where
 	F: Fn() -> Vec<MsgItem> + Send + 'static
@@ -194,6 +198,7 @@ where
 		ch_tid,
 		vec![],
 		publish_topic_names_cloned,
+		weight,
 	);
 
 	Ok((ch_tid, handle))

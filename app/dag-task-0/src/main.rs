@@ -33,6 +33,7 @@ fn main()
 		f,
 		vec![Cow::from("topic0")],
 		Duration::from_secs(1),
+		1000,
 	).unwrap();
 	handles.push(handle);
 	tids.push(tid);
@@ -48,6 +49,7 @@ fn main()
 		f,
 		vec![Cow::from("topic0")],
 		vec![Cow::from("topic1")],
+		1000,
 	).unwrap();
 	handles.push(handle);
 	tids.push(tid);
@@ -63,6 +65,7 @@ fn main()
 		f,
 		vec![Cow::from("topic1")],
 		vec![],
+		1000,
 	).unwrap();
 	handles.push(handle);
 	tids.push(tid);

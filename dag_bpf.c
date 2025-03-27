@@ -577,6 +577,11 @@ __bpf_kfunc void bpf_dag_task_culc_HELT_prio(struct bpf_dag_task *dag_task)
 			curr_node->prio = curr_node->weight + tail_weight_max;
 		}
 	}
+
+	// DEBUG
+	// TODO: remove here
+	pr_info("[*] bpf_dag_task_culc_HELT_prio");
+	bpf_dag_task_dump(dag_task);
 }
 
 __bpf_kfunc void bpf_dag_task_release_dtor(void *dag_task)
