@@ -45,3 +45,5 @@ graph LR
 | task7 | 100 |  100 |
 
 ![](image.png)
+
+![](image-1.png)
