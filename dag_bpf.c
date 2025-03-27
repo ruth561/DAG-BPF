@@ -179,14 +179,24 @@ static bool bpf_dag_task_is_well_formed(struct bpf_dag_task *dag_task)
 	for (int i = 0; i < dag_task->nr_nodes; i++) {
 		struct node_info *node = &dag_task->nodes[i];
 
-		if (!is_in_range_eq(dag_task->nodes[i].nr_ins, 0, DAG_TASK_MAX_DEG))
+		if (!is_in_range_eq(node->nr_ins, 0, DAG_TASK_MAX_DEG))
 			return false;
 		
-		if (!is_in_range_eq(dag_task->nodes[i].nr_outs, 0, DAG_TASK_MAX_DEG))
+		if (!is_in_range_eq(node->nr_outs, 0, DAG_TASK_MAX_DEG))
 			return false;
 
 		if (cnt_nr_nodes(dag_task, node->tid) != 1) {
 			pr_err("DAG task has two or more node that share the same tid (=%d)", node->tid);
+			return false;
+		}
+
+		if (check_duplication_ins_outs(node->ins, node->nr_ins)) {
+			pr_err("node->ins has a duplicate");
+			return false;
+		}
+
+		if (check_duplication_ins_outs(node->outs, node->nr_outs)) {
+			pr_err("node->outs has a duplicate");
 			return false;
 		}
 
@@ -195,19 +205,11 @@ static bool bpf_dag_task_is_well_formed(struct bpf_dag_task *dag_task)
 				pr_err("node->ins[%d](=%d) is out of range.", j, node->ins[j]);
 				return false;
 			}
+		}
 
+		for (int j = 0; j < node->nr_outs; j++) {
 			if (!is_in_range(node->outs[j], 0, dag_task->nr_nodes)) {
 				pr_err("node->outs[%d](=%d) is out of range.", j, node->outs[j]);
-				return false;
-			}
-
-			if (check_duplication_ins_outs(node->ins, node->nr_ins)) {
-				pr_err("node->ins has a duplicate");
-				return false;
-			}
-
-			if (check_duplication_ins_outs(node->outs, node->nr_outs)) {
-				pr_err("node->outs has a duplicate");
 				return false;
 			}
 		}
