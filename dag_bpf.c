@@ -532,6 +532,15 @@ __bpf_kfunc s32 bpf_dag_task_set_weight(struct bpf_dag_task *dag_task, u32 node_
 	}
 }
 
+__bpf_kfunc s32 bpf_dag_task_get_prio(struct bpf_dag_task *dag_task, u32 node_id)
+{
+	if (node_id < dag_task->nr_nodes) {
+		return dag_task->nodes[node_id].prio;
+	} else {
+		return -1;
+	}
+}
+
 __bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task)
 {
 	pr_info("[*] bpf_dag_task_free\n");
@@ -595,6 +604,7 @@ BTF_ID_FLAGS(func, bpf_dag_task_add_node, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_add_edge, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_get_weight, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_set_weight, KF_TRUSTED_ARGS)
+BTF_ID_FLAGS(func, bpf_dag_task_get_prio, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_culc_HELT_prio, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_dump)
 BTF_KFUNCS_END(my_ops_kfunc_ids)

@@ -73,6 +73,8 @@ static long handle_new_dag_task(struct bpf_dag_msg_new_task_payload *payload)
 	assert(!ret);
 	ret = bpf_dag_task_get_weight(dag_task, 0);
 	assert(ret == 42);
+	ret = bpf_dag_task_get_prio(dag_task, 0);
+	assert(ret == 0);
 
 	key = payload->src_node_tid;
 	local.dag_task = NULL;
