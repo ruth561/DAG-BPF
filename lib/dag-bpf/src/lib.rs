@@ -7,11 +7,11 @@ pub fn send_dag_task_to_bpf(urb: &mut UserRingBuffer, dag_task: &DagTask)
 {
 	let dag_task_id = dag_task.node_to_reactor[0];
 
-	let msg = DagBpfMsg::new_task(dag_task_id, 0).as_bytes();
+	let msg = DagBpfMsg::new_task(dag_task_id, 1 /* default value */).as_bytes();
 	urb.send_bytes(&msg).unwrap();
 
 	for i in 1..dag_task.nr_nodes {
-		let msg = DagBpfMsg::add_node(dag_task_id, dag_task.node_to_reactor[i], 0).as_bytes();
+		let msg = DagBpfMsg::add_node(dag_task_id, dag_task.node_to_reactor[i], 1 /* default value */).as_bytes();
 		urb.send_bytes(&msg).unwrap();
 	}
 
