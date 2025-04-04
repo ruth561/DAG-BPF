@@ -153,6 +153,8 @@ where
 		subscribe_topic_names_cloned,
 		publish_topic_names_cloned,
 		weight,
+		-1,
+		-1,
 	);
 
 	Ok((ch_tid, handle))
@@ -165,6 +167,7 @@ pub fn spawn_periodic_reactor<F>(
 	f: F,
 	publish_topic_names: Vec<Cow<'static, str>>,
 	period: Duration,
+	relative_deadline: Duration,
 	weight: TaskWeight,
 ) -> Result<(LinuxTid, JoinHandle<()>), Box<dyn Error>>
 where
@@ -199,6 +202,8 @@ where
 		vec![],
 		publish_topic_names_cloned,
 		weight,
+		period.as_nanos() as i64,
+		relative_deadline.as_nanos() as i64,
 	);
 
 	Ok((ch_tid, handle))

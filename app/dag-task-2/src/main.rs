@@ -53,6 +53,7 @@ fn main()
 		task0,
 		vec![Cow::from("topic1"), Cow::from("topic2"), Cow::from("topic3"), Cow::from("topic4"), Cow::from("topic5")],
 		Duration::from_secs(1),
+		Duration::from_secs(1),
 		WEIGHTS[0] as i64,
 	).unwrap();
 	handles.push(handle);

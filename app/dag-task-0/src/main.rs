@@ -33,6 +33,7 @@ fn main()
 		f,
 		vec![Cow::from("topic0")],
 		Duration::from_secs(1),
+		Duration::from_secs(1),
 		1000,
 	).unwrap();
 	handles.push(handle);

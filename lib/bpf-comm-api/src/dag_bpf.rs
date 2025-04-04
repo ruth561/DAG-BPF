@@ -13,6 +13,8 @@ enum MsgType {
 pub struct MsgNewTaskPayload {
 	src_node_tid: LinuxTid,
 	src_node_weight: u32,
+	relative_deadline: i64,
+	period: i64,
 }
 
 #[repr(C)]
@@ -40,9 +42,9 @@ pub enum DagBpfMsg {
 }
 
 impl DagBpfMsg {
-	pub fn new_task(src_node_tid: LinuxTid, src_node_weight: u32) -> Self
+	pub fn new_task(src_node_tid: LinuxTid, src_node_weight: u32, relative_deadline: i64, period: i64) -> Self
 	{
-		DagBpfMsg::NewTask(MsgNewTaskPayload { src_node_tid, src_node_weight, })
+		DagBpfMsg::NewTask(MsgNewTaskPayload { src_node_tid, src_node_weight, relative_deadline, period })
 	}
 
 	pub fn add_node(dag_task_id: LinuxTid, tid: LinuxTid, weight: u32) -> Self
