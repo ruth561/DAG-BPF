@@ -6,15 +6,16 @@
 #define DAG_TASK_MAX_DEG	20
 #define DAG_TASK_MAX_EDGES	1000
 typedef unsigned long long u64;
+typedef long long s64;
 typedef int s32;
 typedef unsigned int u32;
 typedef unsigned char u8;
 
 struct node_info {
 	u32 tid;
-	u32 weight;
+	s64 weight;
 
-	s32 prio; /* (internal) */
+	s64 prio; /* (internal) */
 
 	u32 nr_ins; // 入力辺の数
 	u32 ins[DAG_TASK_MAX_DEG];

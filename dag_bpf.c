@@ -290,7 +290,7 @@ static __init void bpf_dag_task_manager_init(void)
 }
 
 // MARK: bpf_dag_task API
-static s32 __bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, u32 weight)
+static s32 __bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, s64 weight)
 {
 	s32 node_id;
 
@@ -386,7 +386,7 @@ static s32 __bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from_tid, 
 	return edge_id;
 }
 
-static s32 bpf_dag_task_init(struct bpf_dag_task *dag_task, u32 src_node_tid, u32 src_node_weight)
+static s32 bpf_dag_task_init(struct bpf_dag_task *dag_task, u32 src_node_tid, s64 src_node_weight)
 {
 	s32 ret;
 
@@ -417,12 +417,12 @@ __bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task);
  * return value: dag_task id if succeeded, otherwise -1.
  */
 __bpf_kfunc struct bpf_dag_task *bpf_dag_task_alloc(u32 src_node_tid,
-						    u32 src_node_weight)
+						    s64 src_node_weight)
 {
 	s32 err;
 	struct bpf_dag_task *dag_task = NULL;
 
-	pr_info("[*] bpf_dag_task_alloc (src_node_tid=%d, src_node_weight=%d)\n",
+	pr_info("[*] bpf_dag_task_alloc (src_node_tid=%d, src_node_weight=%lld)\n",
 		src_node_tid, src_node_weight);
 
 	if (bpf_dag_task_manager.nr_dag_tasks >= BPF_DAG_TASK_LIMIT) {
@@ -462,7 +462,7 @@ __bpf_kfunc void bpf_dag_task_dump(struct bpf_dag_task *dag_task)
 
 	pr_info("  nr_nodes: %u\n", dag_task->nr_nodes);
 	for (int i = 0; i < dag_task->nr_nodes; i++) {
-		pr_info("  node[%d]: tid=%d, weight=%d, prio=%d\n",
+		pr_info("  node[%d]: tid=%d, weight=%lld, prio=%lld\n",
 			i,
 			dag_task->nodes[i].tid,
 			dag_task->nodes[i].weight,
@@ -496,7 +496,7 @@ __bpf_kfunc void bpf_dag_task_dump(struct bpf_dag_task *dag_task)
  * @retval: -1 if it was failed, otherwise returns node_id.
  */
 __bpf_kfunc s32 bpf_dag_task_add_node(struct bpf_dag_task *dag_task,
-				      u32 tid, u32 weight)
+				      u32 tid, s64 weight)
 {
 	return __bpf_dag_task_add_node(dag_task, tid, weight);
 }
@@ -513,7 +513,7 @@ __bpf_kfunc s32 bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from, u
 	return __bpf_dag_task_add_edge(dag_task, from, to);
 }
 
-__bpf_kfunc s32 bpf_dag_task_get_weight(struct bpf_dag_task *dag_task, u32 node_id)
+__bpf_kfunc s64 bpf_dag_task_get_weight(struct bpf_dag_task *dag_task, u32 node_id)
 {
 	if (node_id < dag_task->nr_nodes) {
 		return dag_task->nodes[node_id].weight;
@@ -522,7 +522,7 @@ __bpf_kfunc s32 bpf_dag_task_get_weight(struct bpf_dag_task *dag_task, u32 node_
 	}
 }
 
-__bpf_kfunc s32 bpf_dag_task_set_weight(struct bpf_dag_task *dag_task, u32 node_id, s32 weight)
+__bpf_kfunc s32 bpf_dag_task_set_weight(struct bpf_dag_task *dag_task, u32 node_id, s64 weight)
 {
 	if (node_id < dag_task->nr_nodes) {
 		dag_task->nodes[node_id].weight = weight;
@@ -532,7 +532,7 @@ __bpf_kfunc s32 bpf_dag_task_set_weight(struct bpf_dag_task *dag_task, u32 node_
 	}
 }
 
-__bpf_kfunc s32 bpf_dag_task_get_prio(struct bpf_dag_task *dag_task, u32 node_id)
+__bpf_kfunc s64 bpf_dag_task_get_prio(struct bpf_dag_task *dag_task, u32 node_id)
 {
 	if (node_id < dag_task->nr_nodes) {
 		return dag_task->nodes[node_id].prio;
@@ -565,13 +565,16 @@ __bpf_kfunc void bpf_dag_task_culc_HELT_prio(struct bpf_dag_task *dag_task)
 		struct node_info *curr_node = &dag_task->nodes[i];
 
 		if (curr_node->nr_outs == 0) {
+			/*
+			 * node->prio means the rank defined in HELT algorithm.
+			 */
 			curr_node->prio = curr_node->weight;
 		} else {
-			u32 tail_weight_max = 0;
+			s64 tail_weight_max = 0;
 			for (int j = 0; j < curr_node->nr_outs; j++) {
 				int node_id = curr_node->outs[j];
 				struct node_info *node = &dag_task->nodes[node_id];
-				u32 tail_weight_curr = node->prio;
+				s64 tail_weight_curr = node->prio;
 				tail_weight_max = tail_weight_max < tail_weight_curr ? tail_weight_curr : tail_weight_max;
 			}
 			curr_node->prio = curr_node->weight + tail_weight_max;
