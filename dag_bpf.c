@@ -587,6 +587,41 @@ __bpf_kfunc void bpf_dag_task_culc_HELT_prio(struct bpf_dag_task *dag_task)
 	bpf_dag_task_dump(dag_task);
 }
 
+__bpf_kfunc void bpf_dag_task_culc_HLBS_prio(struct bpf_dag_task *dag_task, s64 now,
+					     s64 relative_deadline)
+{
+	s64 deadline = now + relative_deadline;
+
+	if (dag_task->nr_nodes == 0)
+		return;
+
+	for (s32 i = dag_task->nr_nodes - 1; i >= 0; i--) {
+		struct node_info *curr_node = &dag_task->nodes[i];
+
+		if (curr_node->nr_outs == 0) {
+			/*
+			 * node->prio indicates the deadline by which the node must begin execution.
+			 */
+			curr_node->prio = deadline - curr_node->weight;
+		} else {
+			s64 tail_deadline_min = S64_MAX;
+			for (int j = 0; j < curr_node->nr_outs; j++) {
+				int node_id = curr_node->outs[j];
+				struct node_info *node = &dag_task->nodes[node_id];
+				s64 tail_deadline_curr = node->prio;
+				tail_deadline_min = tail_deadline_min < tail_deadline_curr
+					? tail_deadline_min : tail_deadline_curr;
+			}
+			curr_node->prio = tail_deadline_min - curr_node->weight;
+		}
+	}
+
+	// DEBUG
+	// TODO: remove here
+	pr_info("[*] bpf_dag_task_culc_HLBS_prio");
+	bpf_dag_task_dump(dag_task);
+}
+
 __bpf_kfunc void bpf_dag_task_release_dtor(void *dag_task)
 {
 	pr_info("[*] bpf_dag_task_release_dtor\n");
@@ -614,6 +649,7 @@ BTF_ID_FLAGS(func, bpf_dag_task_get_weight, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_set_weight, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_get_prio, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_culc_HELT_prio, KF_TRUSTED_ARGS)
+BTF_ID_FLAGS(func, bpf_dag_task_culc_HLBS_prio, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_dump)
 BTF_KFUNCS_END(my_ops_kfunc_ids)
 
