@@ -12,6 +12,13 @@ use linux_utils::LinuxTid;
 pub type Reactor = LinuxTid;
 pub type TaskWeight = i64;
 
+#[derive(Debug, Clone)]
+pub struct TaskInfo {
+	weight: i64,
+	relative_deadline: i64,
+	period: i64,
+}
+
 #[derive(Debug)]
 pub struct DagTask {
 	pub id: usize,
@@ -20,6 +27,8 @@ pub struct DagTask {
 	pub node_to_weight: Vec<TaskWeight>,
 	pub reactor_to_node: HashMap<Reactor, usize>,
 	pub edges: Vec<Vec<usize>>,
+	pub relative_deadline: i64,
+	pub period: i64,
 }
 
 impl DagTask {
@@ -31,6 +40,8 @@ impl DagTask {
 			node_to_weight: vec![],
 			reactor_to_node: HashMap::new(),
 			edges: vec![],
+			relative_deadline: -1,
+			period: -1,
 		}
 	}
 }
@@ -39,8 +50,8 @@ impl DagTask {
 pub struct TaskGraph {
 	pub nr_tasks: usize,
 	pub task_to_reactor: Vec<Reactor>, // task_to_reactor[i]: the i-th reactor id
-	pub task_to_weight: Vec<TaskWeight>,
 	pub reactor_to_task: HashMap<Reactor, usize>,
+	pub task_info: Vec<TaskInfo>,
 	pub edges: Vec<Vec<usize>>,
 }
 
@@ -49,8 +60,8 @@ impl TaskGraph {
 		Self {
 			nr_tasks: 0,
 			task_to_reactor: vec![],
-			task_to_weight: vec![],
 			reactor_to_task: HashMap::new(),
+			task_info: vec![],
 			edges: vec![],
 		}
 	}
@@ -125,13 +136,27 @@ impl TaskGraph {
 			let mut node_to_reactor = vec![];
 			let mut node_to_weight = vec![];
 			let mut reactor_to_node = HashMap::new();
+			let mut period = 0;
+			let mut relative_deadline = i64::MAX;
 			for node in &nodes {
 				if reachable_nodes.contains(node) {
 					let reactor = self.task_to_reactor[*node];
-					let weight = self.task_to_weight[*node];
+					let info = &self.task_info[*node];
 					node_to_reactor.push(reactor.clone());
-					node_to_weight.push(weight.clone());
+					node_to_weight.push(info.weight.clone());
 					reactor_to_node.insert(reactor, node_to_reactor.len() - 1);
+
+					// periodは最大のものを選ぶ
+					// relative_deadlineは最小のものを選ぶ
+					// TODO:
+					// いずれにせよ、srcノードが複数ある場合の対処であり、
+					// 必要になったら、ここの実装はしっかりと考える
+					if info.period > period {
+						period = info.period
+					}
+					if 0 < info.relative_deadline && info.relative_deadline < relative_deadline {
+						relative_deadline = info.relative_deadline;
+					}
 				}
 			}
 
@@ -143,6 +168,8 @@ impl TaskGraph {
 				node_to_weight,
 				reactor_to_node,
 				edges: vec![vec![]; reachable_nodes.len()],
+				relative_deadline,
+				period,
 			};
 
 			for src in &reachable_nodes {
@@ -167,7 +194,7 @@ impl TaskGraph {
 #[derive(Debug)]
 pub struct TaskGraphBuilder {
 	pub reactors: HashSet<Reactor>,
-	pub reactor_to_weight: HashMap<Reactor, TaskWeight>,
+	pub reactor_info: HashMap<Reactor, TaskInfo>,
 	pub subs: HashMap<Cow<'static, str>, HashSet<Reactor>>, // topic name -> [reactor id]
 	pub pubs: HashMap<Cow<'static, str>, HashSet<Reactor>>, // topic name -> [reactor id]
 	pub topics: HashSet<Cow<'static, str>>,
@@ -177,7 +204,7 @@ impl TaskGraphBuilder {
 	pub fn new() -> Self {
 		Self {
 			reactors: HashSet::new(),
-			reactor_to_weight: HashMap::new(),
+			reactor_info: HashMap::new(),
 			subs: HashMap::new(),
 			pubs: HashMap::new(),
 			topics: HashSet::new(),
@@ -190,7 +217,9 @@ impl TaskGraphBuilder {
 		reactor: Reactor,
 		subs: Vec<Cow<'static, str>>,
 		pubs: Vec<Cow<'static, str>>,
-		weight: TaskWeight
+		weight: TaskWeight,
+		period: i64,
+		relative_deadline: i64,
 	) {
 		assert!(!self.reactors.contains(&reactor));
 
@@ -219,13 +248,13 @@ impl TaskGraphBuilder {
 		}
 
 		self.reactors.insert(reactor);
-		self.reactor_to_weight.insert(reactor, weight);
+		self.reactor_info.insert(reactor, TaskInfo { weight, relative_deadline, period });
 	}
 
 	pub fn build(&self) -> TaskGraph {
 		let nr_tasks = self.reactors.len();
 		let mut task_to_reactor = vec![];
-		let mut task_to_weight = vec![];
+		let mut task_info = vec![];
 		let mut reactor_to_task = HashMap::new();
 		let mut edges = vec![vec![]; nr_tasks];
 
@@ -233,7 +262,7 @@ impl TaskGraphBuilder {
 		reactors.sort();
 		for (i, reactor) in reactors.iter().enumerate() {
 			task_to_reactor.push(**reactor);
-			task_to_weight.push(self.reactor_to_weight.get(reactor).unwrap().clone());
+			task_info.push(self.reactor_info.get(reactor).unwrap().clone());
 			reactor_to_task.insert(**reactor, i);
 		}
 
@@ -259,7 +288,7 @@ impl TaskGraphBuilder {
 		TaskGraph {
 			nr_tasks,
 			task_to_reactor,
-			task_to_weight,
+			task_info,
 			reactor_to_task,
 			edges,
 		}
@@ -277,17 +306,20 @@ fn test_dag_tasks_0()
 {
 	let mut builder = TaskGraphBuilder::new();
 
-	builder.reg_reactor(0, vec![], vec![Cow::from("topic0")], 1);
-	builder.reg_reactor(1, vec![Cow::from("topic0")], vec![Cow::from("topic1"), Cow::from("topic2")], 1);
-	builder.reg_reactor(2, vec![Cow::from("topic1")], vec![Cow::from("topic3")], 1);
-	builder.reg_reactor(3, vec![Cow::from("topic2")], vec![Cow::from("topic4")], 1);
-	builder.reg_reactor(4, vec![Cow::from("topic3"), Cow::from("topic4")], vec![], 1);
+	builder.reg_reactor(0, vec![], vec![Cow::from("topic0")], 1, 10, 10);
+	builder.reg_reactor(1, vec![Cow::from("topic0")], vec![Cow::from("topic1"), Cow::from("topic2")], 1, -1, -1);
+	builder.reg_reactor(2, vec![Cow::from("topic1")], vec![Cow::from("topic3")], 1, -1, -1);
+	builder.reg_reactor(3, vec![Cow::from("topic2")], vec![Cow::from("topic4")], 1, -1, -1);
+	builder.reg_reactor(4, vec![Cow::from("topic3"), Cow::from("topic4")], vec![], 1, -1, -1);
 
 	let task_graph = builder.build();
 	let dag_tasks = task_graph.to_dag_tasks().unwrap();
 	assert_eq!(dag_tasks.len(), 1);
 	assert!(dag_tasks[0].node_to_reactor == [0, 1, 2, 3, 4] ||
 		dag_tasks[0].node_to_reactor == [0, 1, 3, 2, 4]);
+	
+	assert!(dag_tasks[0].relative_deadline == 10);
+	assert!(dag_tasks[0].period == 10);
 }
 
 /// This test case is the same as the above one, except for the rector numbers.
@@ -296,11 +328,11 @@ fn test_dag_tasks_1()
 {
 	let mut builder = TaskGraphBuilder::new();
 
-	builder.reg_reactor(4, vec![], vec![Cow::from("topic0")], 1);
-	builder.reg_reactor(3, vec![Cow::from("topic0")], vec![Cow::from("topic1"), Cow::from("topic2")], 1);
-	builder.reg_reactor(0, vec![Cow::from("topic1")], vec![Cow::from("topic3")], 1);
-	builder.reg_reactor(2, vec![Cow::from("topic2")], vec![Cow::from("topic4")], 1);
-	builder.reg_reactor(1, vec![Cow::from("topic3"), Cow::from("topic4")], vec![], 1);
+	builder.reg_reactor(4, vec![], vec![Cow::from("topic0")], 1, 10, 10);
+	builder.reg_reactor(3, vec![Cow::from("topic0")], vec![Cow::from("topic1"), Cow::from("topic2")], 1, -1, -1);
+	builder.reg_reactor(0, vec![Cow::from("topic1")], vec![Cow::from("topic3")], 1, -1, -1);
+	builder.reg_reactor(2, vec![Cow::from("topic2")], vec![Cow::from("topic4")], 1,  -1, -1);
+	builder.reg_reactor(1, vec![Cow::from("topic3"), Cow::from("topic4")], vec![], 1, -1, -1);
 
 	let task_graph = builder.build();
 	let dag_tasks = task_graph.to_dag_tasks().unwrap();
@@ -323,9 +355,9 @@ fn test_non_dag_task()
 {
 	let mut builder = TaskGraphBuilder::new();
 
-	builder.reg_reactor(0, vec![Cow::from("topic2")], vec![Cow::from("topic0")], 1);
-	builder.reg_reactor(1, vec![Cow::from("topic0")], vec![Cow::from("topic1")], 1);
-	builder.reg_reactor(2, vec![Cow::from("topic1")], vec![Cow::from("topic2")], 1);
+	builder.reg_reactor(0, vec![Cow::from("topic2")], vec![Cow::from("topic0")], 1, 10, 10);
+	builder.reg_reactor(1, vec![Cow::from("topic0")], vec![Cow::from("topic1")], 1, 10, 10);
+	builder.reg_reactor(2, vec![Cow::from("topic1")], vec![Cow::from("topic2")], 1, 10, 10);
 
 	let task_graph = builder.build();
 	let dag_tasks = task_graph.to_dag_tasks();
@@ -343,12 +375,12 @@ fn test_dag_tasks_2()
 {
 	let mut builder = TaskGraphBuilder::new();
 
-	builder.reg_reactor(0, vec![Cow::from("topic2")], vec![], 1);
-	builder.reg_reactor(1, vec![Cow::from("topic0")], vec![Cow::from("topic1")], 1);
-	builder.reg_reactor(2, vec![], vec![Cow::from("topic0")], 1);
-	builder.reg_reactor(3, vec![], vec![Cow::from("topic3")], 1);
-	builder.reg_reactor(4, vec![Cow::from("topic0"), Cow::from("topic1")], vec![], 1);
-	builder.reg_reactor(5, vec![Cow::from("topic3")], vec![Cow::from("topic2")], 1);
+	builder.reg_reactor(0, vec![Cow::from("topic2")], vec![], 1, -1, -1);
+	builder.reg_reactor(1, vec![Cow::from("topic0")], vec![Cow::from("topic1")], 1, -1, -1);
+	builder.reg_reactor(2, vec![], vec![Cow::from("topic0")], 1, 10, 10);
+	builder.reg_reactor(3, vec![], vec![Cow::from("topic3")], 1, 30, 20);
+	builder.reg_reactor(4, vec![Cow::from("topic0"), Cow::from("topic1")], vec![], 1, -1, -1);
+	builder.reg_reactor(5, vec![Cow::from("topic3")], vec![Cow::from("topic2")], 1, -1, -1);
 
 	let task_graph = builder.build();
 	let dag_tasks = task_graph.to_dag_tasks().unwrap();
@@ -357,4 +389,9 @@ fn test_dag_tasks_2()
 	assert_eq!(dag_task0.node_to_reactor, [3, 5, 0]);
 	let dag_task1 = &dag_tasks[1];
 	assert_eq!(dag_task1.node_to_reactor, [2, 1, 4]);
+
+	assert_eq!(dag_task0.period, 30);
+	assert_eq!(dag_task0.relative_deadline, 20);
+	assert_eq!(dag_task1.period, 10);
+	assert_eq!(dag_task1.relative_deadline, 10);
 }
