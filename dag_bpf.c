@@ -415,6 +415,49 @@ static s32 bpf_dag_task_init(struct bpf_dag_task *dag_task, u32 src_node_tid, s6
 	return 0;
 }
 
+static void sort_node_by_prio(struct bpf_dag_task *dag_task)
+{
+	u32 tmp;
+	u32 *buf = dag_task->buf;
+
+	/*
+	 * Init dag_task->buf
+	 */
+	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		buf[i] = i;
+	}
+
+	/*
+	 * TODO: More efficient sort algorithm
+	 * Insert sort
+	 */
+	for (int i = 1; i < dag_task->nr_nodes; i++) {
+		int j = i;
+
+		while (0 < j) {
+			if (dag_task->nodes[buf[j - 1]].prio < dag_task->nodes[buf[j]].prio)
+				break;
+			
+			tmp = buf[j];
+			buf[j] = buf[j - 1];
+			buf[j - 1] = tmp;
+			j--;
+		}
+	}
+
+	/*
+	 * Verify the result
+	 */
+	for (int i = 1; i < dag_task->nr_nodes; i++) {
+		WARN_ON_ONCE(dag_task->nodes[buf[i - 1]].prio > dag_task->nodes[buf[i]].prio);
+	}
+
+	pr_info("[DEBUG] The result of sort dag_task%d", dag_task->id);
+	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		pr_info("node%d", buf[i]);
+	}
+}
+
 // MARK: kfuncs
 __bpf_kfunc_start_defs();
 
@@ -598,6 +641,8 @@ __bpf_kfunc void bpf_dag_task_culc_HELT_prio(struct bpf_dag_task *dag_task)
 	// TODO: remove here
 	pr_info("[*] bpf_dag_task_culc_HELT_prio");
 	bpf_dag_task_dump(dag_task);
+
+	sort_node_by_prio(dag_task);
 }
 
 __bpf_kfunc void bpf_dag_task_culc_HLBS_prio(struct bpf_dag_task *dag_task, s64 now)
