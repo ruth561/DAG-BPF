@@ -614,6 +614,10 @@ __bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task)
 
 __bpf_kfunc void bpf_dag_task_culc_HELT_prio(struct bpf_dag_task *dag_task)
 {
+	u64 now = ktime_get_boot_fast_ns();
+
+	dag_task->deadline = now + dag_task->relative_deadline;
+
 	if (dag_task->nr_nodes == 0)
 		return;
 
@@ -643,10 +647,34 @@ __bpf_kfunc void bpf_dag_task_culc_HELT_prio(struct bpf_dag_task *dag_task)
 	bpf_dag_task_dump(dag_task);
 
 	sort_node_by_prio(dag_task);
+	/*
+	 * Reassign priority to compare the deadline between DAG tasks.
+	 */
+	u32 *buf = dag_task->buf;
+	for (int i = 0; i < dag_task->nr_nodes; i++) {
+		/*
+		 * The above HELT algorithm calculates the rank value and stores it in prio.
+		 * In HELT, a higher rank means a higher priority.
+		 * However, since sort_node_by_prio sorts nodes in ascending order of prio,
+		 * the order stored in buf becomes the reverse of the intended priority.
+		 * 
+		 * To fix this, we store the value obtained by subtracting the node index
+		 * from dag_task->deadline into prio. This way, when sorted in ascending order:
+		 *   - DAG tasks with earlier deadlines are prioritized,
+		 *   - and among nodes in the same DAG task, those with higher ranks are prioritized.
+		 *
+		 * TODO: If deadlines are too close between DAG tasks, priority ordering may become unstable.
+		 * We need to address this issue.
+		 */
+		dag_task->nodes[buf[i]].prio = dag_task->deadline - i;
+	}
+	bpf_dag_task_dump(dag_task);
 }
 
-__bpf_kfunc void bpf_dag_task_culc_HLBS_prio(struct bpf_dag_task *dag_task, s64 now)
+__bpf_kfunc void bpf_dag_task_culc_HLBS_prio(struct bpf_dag_task *dag_task)
 {
+	u64 now = ktime_get_boot_fast_ns();
+
 	dag_task->deadline = now + dag_task->relative_deadline;
 
 	if (dag_task->nr_nodes == 0)

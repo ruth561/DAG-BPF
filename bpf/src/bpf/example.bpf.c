@@ -403,7 +403,7 @@ static void test_culc_HLBS_prio(void)
 	assert(bpf_dag_task_add_edge(dag_task, 1004, 1005) >= 0);
 	assert(bpf_dag_task_add_edge(dag_task, 1005, 1006) >= 0);
 
-	bpf_dag_task_culc_HLBS_prio(dag_task, 0);
+	bpf_dag_task_culc_HLBS_prio(dag_task);
 
 	bpf_dag_task_dump(dag_task);
 
