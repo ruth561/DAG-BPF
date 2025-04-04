@@ -61,7 +61,7 @@ static long handle_new_dag_task(struct bpf_dag_msg_new_task_payload *payload)
 	long status;
 	struct dag_tasks_map_value local, *v;
 
-	dag_task = bpf_dag_task_alloc(payload->src_node_tid, payload->src_node_weight);
+	dag_task = bpf_dag_task_alloc(payload->src_node_tid, payload->src_node_weight, 10);
 	if (!dag_task) {
 		bpf_printk("Failed to newly allocate a DAG task (src_node_tid=%d).", payload->src_node_tid);
 		return 1;
@@ -249,7 +249,7 @@ static void test_invalid_dag_task(void)
 	s32 ret;
 	struct bpf_dag_task *dag_task;
 
-	dag_task = bpf_dag_task_alloc(1000, 0);
+	dag_task = bpf_dag_task_alloc(1000, 0, 10);
 	if (!dag_task) {
 		bpf_printk("Failed to newly allocate a DAG task (src_node_tid=%d).", 1000);
 		return;
@@ -268,7 +268,7 @@ static void test_invalid_dag_task2(void)
 	s32 ret, i = 0;
 	struct bpf_dag_task *dag_task;
 
-	dag_task = bpf_dag_task_alloc(1000, 0);
+	dag_task = bpf_dag_task_alloc(1000, 0, 10);
 	if (!dag_task) {
 		bpf_printk("Failed to newly allocate a DAG task (src_node_tid=%d).", 1000);
 		return;
@@ -291,7 +291,7 @@ static void test_invalid_dag_task3(void)
 	s32 ret, i = 0;
 	struct bpf_dag_task *dag_task;
 
-	dag_task = bpf_dag_task_alloc(1000, 0);
+	dag_task = bpf_dag_task_alloc(1000, 0, 10);
 	assert_ret(dag_task);
 
 	ret = bpf_dag_task_add_node(dag_task, 1001, 0);
@@ -338,7 +338,7 @@ static void test_culc_HELT_prio(void)
 	 *	1005's prio: 2
 	 *	1006's prio: 1
 	 */
-	dag_task = bpf_dag_task_alloc(1000, 1);
+	dag_task = bpf_dag_task_alloc(1000, 1, 10);
 	assert_ret(dag_task);
 
 	assert(bpf_dag_task_add_node(dag_task, 1001, 3) >= 0);
@@ -384,7 +384,7 @@ static void test_culc_HLBS_prio(void)
 	 *	1005's prio: 8
 	 *	1006's prio: 9
 	 */
-	dag_task = bpf_dag_task_alloc(1000, 1);
+	dag_task = bpf_dag_task_alloc(1000, 1, 10);
 	assert_ret(dag_task);
 
 	assert(bpf_dag_task_add_node(dag_task, 1001, 3) >= 0);
@@ -403,7 +403,7 @@ static void test_culc_HLBS_prio(void)
 	assert(bpf_dag_task_add_edge(dag_task, 1004, 1005) >= 0);
 	assert(bpf_dag_task_add_edge(dag_task, 1005, 1006) >= 0);
 
-	bpf_dag_task_culc_HLBS_prio(dag_task, 0, 10);
+	bpf_dag_task_culc_HLBS_prio(dag_task, 0);
 
 	bpf_dag_task_dump(dag_task);
 

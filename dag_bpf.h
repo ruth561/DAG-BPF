@@ -34,6 +34,8 @@ struct bpf_dag_task {
 	struct node_info nodes[DAG_TASK_MAX_NODES];
 	u32 nr_edges;
 	struct edge_info edges[DAG_TASK_MAX_EDGES];
+	s64 relative_deadline;
+	s64 deadline;
 };
 
 #endif
