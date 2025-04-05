@@ -392,7 +392,7 @@ static s32 __bpf_dag_task_add_edge(struct bpf_dag_task *dag_task, u32 from_tid, 
 }
 
 static s32 bpf_dag_task_init(struct bpf_dag_task *dag_task, u32 src_node_tid, s64 src_node_weight,
-			     s64 relative_deadline)
+			     s64 relative_deadline, s64 period)
 {
 	s32 ret;
 
@@ -401,6 +401,7 @@ static s32 bpf_dag_task_init(struct bpf_dag_task *dag_task, u32 src_node_tid, s6
 
 	dag_task->relative_deadline = relative_deadline;
 	dag_task->deadline = -1;
+	dag_task->period = period;
 
 	/*
 	 * Adds a source node. The node id of the source node is always 0.
@@ -470,13 +471,14 @@ __bpf_kfunc void bpf_dag_task_free(struct bpf_dag_task *dag_task);
  */
 __bpf_kfunc struct bpf_dag_task *bpf_dag_task_alloc(u32 src_node_tid,
 						    s64 src_node_weight,
-						    s64 relative_deadline)
+						    s64 relative_deadline,
+						    s64 period)
 {
 	s32 err;
 	struct bpf_dag_task *dag_task = NULL;
 
-	pr_info("[*] bpf_dag_task_alloc (src_node_tid=%d, src_node_weight=%lld, relative_deadline=%lld)\n",
-		src_node_tid, src_node_weight, relative_deadline);
+	pr_info("[*] bpf_dag_task_alloc (src_node_tid=%d, src_node_weight=%lld, relative_deadline=%lld, period=%lld)\n",
+		src_node_tid, src_node_weight, relative_deadline, period);
 
 	if (bpf_dag_task_manager.nr_dag_tasks >= BPF_DAG_TASK_LIMIT) {
 		pr_err("There is no slots for a DAG task.");
@@ -497,7 +499,7 @@ __bpf_kfunc struct bpf_dag_task *bpf_dag_task_alloc(u32 src_node_tid,
 		return NULL;
 	}
 
-	err = bpf_dag_task_init(dag_task, src_node_tid, src_node_weight, relative_deadline);
+	err = bpf_dag_task_init(dag_task, src_node_tid, src_node_weight, relative_deadline, period);
 	if (err) {
 		pr_err("Failed to init a DAG task.");
 		bpf_dag_task_free(dag_task);
@@ -542,6 +544,7 @@ __bpf_kfunc void bpf_dag_task_dump(struct bpf_dag_task *dag_task)
 
 	pr_info("relative_deadline: %lld", dag_task->relative_deadline);
 	pr_info("deadline: %lld", dag_task->deadline);
+	pr_info("period: %lld", dag_task->period);
 }
 
 /**

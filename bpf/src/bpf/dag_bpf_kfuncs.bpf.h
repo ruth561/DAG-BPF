@@ -12,7 +12,7 @@
 #define __weak __attribute__((weak))
 #endif
 
-extern struct bpf_dag_task *bpf_dag_task_alloc(u32 src_node_tid, u32 src_node_weight, s64 relative_deadline) __weak __ksym;
+extern struct bpf_dag_task *bpf_dag_task_alloc(u32 src_node_tid, u32 src_node_weight, s64 relative_deadline, s64 period) __weak __ksym;
 extern void bpf_dag_task_dump(struct bpf_dag_task *dag_task) __weak __ksym;
 extern void bpf_dag_task_free(struct bpf_dag_task *dag_task) __weak __ksym;
 extern s32 bpf_dag_task_add_node(struct bpf_dag_task *dag_task, u32 tid, u32 weight) __weak __ksym;
