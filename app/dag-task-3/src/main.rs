@@ -4,7 +4,8 @@ use std::borrow::Cow;
 use bpf_comm::urb::UserRingBuffer;
 use reactor_api::*;
 
-const BUSY_UNIT: usize = 50000;
+// const BUSY_UNIT: usize = 50000;
+const BUSY_UNIT: usize = 40000;
 
 fn busy(weight: usize)
 {
@@ -78,6 +79,36 @@ fn main()
 			name: "task7",
 			weight: 100,
 			task_type: TaskType::InnerNode { subscribe_topics: vec![Cow::from("topic8"), Cow::from("topic9"), Cow::from("topic10"), Cow::from("topic11")], },
+			publish_topics: vec![],
+		},
+		TaskInfo {
+			name: "task8",
+			weight: 100,
+			task_type: TaskType::SrcNode { period: Duration::from_millis(400) },
+			publish_topics: vec![Cow::from("topic12"), Cow::from("topic13"), Cow::from("topic14")],
+		},
+		TaskInfo {
+			name: "task9",
+			weight: 200,
+			task_type: TaskType::InnerNode { subscribe_topics: vec![Cow::from("topic12")] },
+			publish_topics: vec![Cow::from("topic15")],
+		},
+		TaskInfo {
+			name: "task10",
+			weight: 100,
+			task_type: TaskType::InnerNode { subscribe_topics: vec![Cow::from("topic13")] },
+			publish_topics: vec![Cow::from("topic16")],
+		},
+		TaskInfo {
+			name: "task11",
+			weight: 100,
+			task_type: TaskType::InnerNode { subscribe_topics: vec![Cow::from("topic14")] },
+			publish_topics: vec![Cow::from("topic17")],
+		},
+		TaskInfo {
+			name: "task12",
+			weight: 100,
+			task_type: TaskType::InnerNode { subscribe_topics: vec![Cow::from("topic15"), Cow::from("topic16"), Cow::from("topic17")] },
 			publish_topics: vec![],
 		},
 	];
