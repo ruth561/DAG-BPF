@@ -32,9 +32,9 @@ graph LR
 
 	topic11 --> task7
 
-	task8((task8)) --> topic[[topic12]]
-	task8          --> topic[[topic13]]
-	task8          --> topic[[topic14]]
+	task8((task8)) --> topic12[[topic12]]
+	task8          --> topic13[[topic13]]
+	task8          --> topic14[[topic14]]
 
 	topic12 --> task9((task9))
 	topic13 --> task10((task11))
@@ -63,6 +63,7 @@ Periodic DAG task per 1 second.
 
 Periodic DAG task per 400 milli-second.
 | task | weight | HELT rank |
+|-|-|-|
 | task8 | 100 |  100 |
 | task9 | 200 |  100 |
 | task10 | 100 |  100 |
