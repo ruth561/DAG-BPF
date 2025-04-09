@@ -6,6 +6,7 @@
 
 #include "dag_bpf.h"
 #include "asm-generic/bug.h"
+#include "linux/cpumask.h"
 #include "linux/printk.h"
 
 MODULE_AUTHOR("Takumi Jin");
@@ -459,6 +460,90 @@ static void sort_node_by_prio(struct bpf_dag_task *dag_task)
 	}
 }
 
+// MARK: sys_info
+/*
+ * This implementation manages per-CPU information, including:
+ *   - the current thread running on each CPU
+ *   - its current priority
+ */
+#define MAX_NR_CPUS 512 /* TODO: hard coding */
+
+struct cpu_info {
+	s32 curr_pid;
+	s64 curr_prio;
+};
+
+struct sys_info_desc {
+	raw_spinlock_t lock;
+	struct cpu_info cpus[MAX_NR_CPUS];
+	s64 max_prio;
+	s32 max_prio_cpu;
+};
+
+struct sys_info_desc sys_info_desc;
+
+static __init void bpf_sys_info_init(void)
+{
+	raw_spin_lock_init(&sys_info_desc.lock);
+
+	for (int cpu = 0; cpu < nr_cpu_ids; cpu++) {
+		WARN_ON_ONCE(!cpu_possible(cpu));
+		sys_info_desc.cpus[cpu].curr_pid = -1;
+		sys_info_desc.cpus[cpu].curr_prio = -1;
+	}
+	sys_info_desc.max_prio = -1;
+	sys_info_desc.max_prio_cpu = -1;
+}
+
+static s32 __bpf_sys_info_update_cpu_prio(s32 cpu, s32 pid, s64 prio)
+{
+	unsigned long flags;
+
+	if (!(0 <= cpu && cpu < MAX_NR_CPUS))
+		return -EINVAL;
+ 
+	raw_spin_lock_irqsave(&sys_info_desc.lock, flags);
+	sys_info_desc.cpus[cpu].curr_pid = pid;
+	sys_info_desc.cpus[cpu].curr_prio = prio;
+	raw_spin_unlock_irqrestore(&sys_info_desc.lock, flags);
+	
+	return 0;
+}
+
+static s32 __bpf_sys_info_get_max_prio_and_cpu(s32 *cpu, s32 *pid, s64 *prio)
+{
+	unsigned long flags;
+	s64 max_prio = -1;
+	s32 max_prio_cpu = -1;
+	s32 max_prio_pid = -1;
+	
+	raw_spin_lock_irqsave(&sys_info_desc.lock, flags);
+	for (int cpu = 0; cpu < nr_cpu_ids; cpu++) {
+		struct cpu_info *cpu_info = &sys_info_desc.cpus[cpu];
+
+		if (cpu_info->curr_prio < 0)
+			continue;
+
+		if (max_prio < cpu_info->curr_prio) {
+			WARN_ON_ONCE(cpu_info->curr_pid < 0);
+			WARN_ON_ONCE(cpu_info->curr_prio < 0);
+			max_prio = cpu_info->curr_prio;
+			max_prio_cpu = cpu;
+			max_prio_pid = cpu_info->curr_pid;
+		}
+	}
+	raw_spin_unlock_irqrestore(&sys_info_desc.lock, flags);
+
+	if (max_prio_cpu < 0) {
+		return -ENOENT;
+	} else {
+		*cpu = max_prio_cpu;
+		*pid = max_prio_pid;
+		*prio = max_prio;
+		return 0;
+	}
+}
+
 // MARK: kfuncs
 __bpf_kfunc_start_defs();
 
@@ -715,6 +800,16 @@ __bpf_kfunc void bpf_dag_task_release_dtor(void *dag_task)
 }
 CFI_NOSEAL(bpf_dag_task_release_dtor);
 
+__bpf_kfunc s32 bpf_sys_info_update_cpu_prio(s32 cpu, s32 pid, s64 prio)
+{
+	return __bpf_sys_info_update_cpu_prio(cpu, pid, prio);
+}
+
+__bpf_kfunc s32 bpf_sys_info_get_max_prio_and_cpu(s32 *cpu, s32 *pid, s64 *prio)
+{
+	return __bpf_sys_info_get_max_prio_and_cpu(cpu, pid, prio);
+}
+
 __bpf_kfunc_end_defs();
 
 BTF_KFUNCS_START(my_ops_kfunc_ids)
@@ -728,6 +823,8 @@ BTF_ID_FLAGS(func, bpf_dag_task_get_prio, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_culc_HELT_prio, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_culc_HLBS_prio, KF_TRUSTED_ARGS)
 BTF_ID_FLAGS(func, bpf_dag_task_dump)
+BTF_ID_FLAGS(func, bpf_sys_info_update_cpu_prio)
+BTF_ID_FLAGS(func, bpf_sys_info_get_max_prio_and_cpu)
 BTF_KFUNCS_END(my_ops_kfunc_ids)
 
 BTF_ID_LIST(dag_task_dtor_ids)
@@ -826,6 +923,8 @@ static int __init my_ops_init(void)
 		pr_err("failed to create file sysfs:my_ops/ctl\n");
 		return err;
 	}
+
+	bpf_sys_info_init();
 
 	bpf_dag_task_manager_init();
 

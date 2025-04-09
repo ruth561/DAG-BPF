@@ -410,6 +410,39 @@ static void test_culc_HLBS_prio(void)
 	bpf_dag_task_free(dag_task);
 }
 
+static void test_sys_info(void)
+{
+	s32 err, pid, cpu;
+	s64 prio;
+
+	/*
+	 * +--------+--------+--------+--------+
+	 * |  CPU0  |  CPU1  |  CPU2  |  CPU3  |
+	 * +--------+--------+--------+--------+
+	 * |  1000  |  1001  |  1002  |  1003  |  
+	 * +--------+--------+--------+--------+
+	 * |     5  |     6  |     3  |     8  |  
+	 * +--------+--------+--------+--------+
+	 */
+	assert(bpf_sys_info_update_cpu_prio(0, 1000, 5) == 0);
+	assert(bpf_sys_info_update_cpu_prio(1, 1001, 6) == 0);
+	assert(bpf_sys_info_update_cpu_prio(2, 1002, 3) == 0);
+	assert(bpf_sys_info_update_cpu_prio(3, 1003, 8) == 0);
+
+	assert(bpf_sys_info_get_max_prio_and_cpu(&cpu, &pid, &prio) == 0);
+	assert(cpu == 3);
+	assert(pid == 1003);
+	assert(prio == 8);
+	bpf_printk("[DEBUG] cpu=%d, pid=%d, prio=%lld", cpu, pid, prio);
+
+	assert(bpf_sys_info_update_cpu_prio(3, 1004, 1) == 0);
+	assert(bpf_sys_info_get_max_prio_and_cpu(&cpu, &pid, &prio) == 0);
+	assert(cpu == 1);
+	assert(pid == 1001);
+	assert(prio == 6);
+	bpf_printk("[DEBUG] cpu=%d, pid=%d, prio=%lld", cpu, pid, prio);
+}
+
 SEC("struct_ops/my_ops_calculate")
 u64 BPF_PROG(my_ops_calculate, u64 n)
 {
@@ -425,6 +458,8 @@ u64 BPF_PROG(my_ops_calculate, u64 n)
 
 	test_culc_HELT_prio();
 	test_culc_HLBS_prio();
+
+	test_sys_info();
 
 	return err;
 }
