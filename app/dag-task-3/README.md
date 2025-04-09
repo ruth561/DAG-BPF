@@ -37,7 +37,7 @@ graph LR
 	task8          --> topic14[[topic14]]
 
 	topic12 --> task9((task9))
-	topic13 --> task10((task11))
+	topic13 --> task10((task10))
 	topic14 --> task11((task11))
 
 	task9   --> topic15[[topic15]]
@@ -64,11 +64,11 @@ Periodic DAG task per 1 second.
 Periodic DAG task per 400 milli-second.
 | task | weight | HELT rank |
 |-|-|-|
-| task8 | 100 |  100 |
-| task9 | 200 |  100 |
-| task10 | 100 |  100 |
-| task11 | 100 |  100 |
-| task11 | 100 |  100 |
+| task8  | 100 |  400 |
+| task9  | 200 |  300 |
+| task10 | 100 |  200 |
+| task11 | 100 |  200 |
+| task12 | 100 |  100 |
 
 # HELT
 
@@ -77,9 +77,3 @@ In HELT, DAG-tasks are first prioritized based on their deadlines, and then thei
 ![](image.png)
 
 ![](image-1.png)
-
-# HLBS
-
-![](image-3.png)
-
-![](image-2.png)
